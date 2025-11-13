@@ -11,8 +11,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.sueltito"
-        minSdk = 23         // 🔹 NFC requiere al menos API 23
-        targetSdk = 34
+        minSdk = 26           // 🔹 NFC requiere al menos API 23
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

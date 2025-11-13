@@ -11,13 +11,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
   google_fonts: ^6.2.1
+
   cupertino_icons: ^1.0.8
+
   font_awesome_flutter: ^10.7.0
-  nfc_manager:
-    git:
-      url: https://github.com/okadan/flutter-nfc-manager.git
-      ref: main
+
+  flutter_nfc_kit: ^3.3.2
+
 
 dev_dependencies:
   flutter_test:

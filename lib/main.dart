@@ -1,44 +1,32 @@
 import 'package:flutter/material.dart';
-import 'dart:convert'; // --- NUEVO --- (Para json.decode y utf8.decode)
-import 'package:nfc_manager/nfc_manager.dart'; // --- NUEVO --- (El paquete NFC)
+import 'dart:convert';
+import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
 
 // Core
 import 'package:sueltito/core/config/app_theme.dart';
-
 // Feature: Auth
 import 'package:sueltito/features/auth/presentation/pages/splash_page.dart';
 import 'package:sueltito/features/auth/presentation/pages/welcome_page.dart';
 import 'package:sueltito/features/auth/presentation/pages/sign_up_page.dart';
-
-// Feature: Main Navigation (Shell)
+// Feature: Main Navigation
 import 'package:sueltito/features/main_navigation/presentation/pages/main_navigation_page.dart';
-
-// --- NUEVO IMPORT ---
+// Pantalla de pago
 import 'package:sueltito/features/payment/presentation/pages/minibus_payment_page.dart';
 
-// --- NUEVO ---
-// Clave global para poder navegar desde el listener de NFC (que no tiene context)
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-void main() async { // --- MODIFICADO --- (convertido a async)
-  // --- NUEVO ---
-  // Aseguramos que Flutter esté inicializado antes de llamar código nativo
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // --- NUEVO ---
-  // Iniciamos el "oyente" de NFC y esperamos a que se configure
-  await _setupNfcListener();
-
+  _setupNfcListener();
   runApp(const MainApp());
 }
 
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: navigatorKey, // --- NUEVO --- (Asignamos la clave global)
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Sueltito',
       theme: getAppTheme(),
@@ -52,57 +40,49 @@ class MainApp extends StatelessWidget {
     );
   }
 }
+
 Future<void> _setupNfcListener() async {
-  bool isAvailable = await NfcManager.instance.isAvailable();
-
-  if (isAvailable) {
+  while (true) {
     try {
-      NfcManager.instance.startSession(
-        // Opciones de polling
-        pollingOptions: {
-          NfcPollingOption.iso14443,
-          NfcPollingOption.iso15693,
-          NfcPollingOption.iso18092,
-        },
-        
-        onDiscovered: (NfcTag tag) async {
-          try {
-            // ------ ESTA ES LA LÍNEA DEL PROBLEMA ------
-            // (El error de 'Ndef' debería desaparecer después del Paso 2)
-            var ndef = Ndef.from(tag); 
-            // ------------------------------------------
+      print("Esperando tag NFC...");
+      NFCTag tag = await FlutterNfcKit.poll(timeout: const Duration(seconds: 20));
 
-            if (ndef == null || ndef.cachedMessage == null) {
-              print("NFC Error: No se encontró mensaje NDEF.");
-              return;
-            }
-
-            final record = ndef.cachedMessage!.records.first;
-            final String mimeType = utf8.decode(record.type);
-
-            if (mimeType == "application/vnd.sueltito") {
-              final String jsonString = utf8.decode(record.payload);
-              final Map<String, dynamic> conductorData = json.decode(jsonString);
-
-              print("¡Tag 'sueltito' detectado! Datos: $conductorData");
-
-              navigatorKey.currentState?.pushNamed(
-                '/minibus_payment',
-                arguments: conductorData,
-              );
-            } else {
-              print("Tag NFC detectado, pero no es 'vnd.sueltito'. Es: $mimeType");
-            }
-            
-          } catch (e) {
-            print("Error al leer el tag NFC: $e");
+      if (tag.ndefAvailable == true) {
+        List<dynamic> records = await FlutterNfcKit.readNDEFRecords(cached: false);
+        if (records.isNotEmpty) {
+          final rec = records.first;
+          final payload = rec.payload;
+          String tagContent;
+          if (payload is String) {
+            tagContent = payload;
+          } else if (payload is List<int>) {
+            tagContent = utf8.decode(payload);
+          } else {
+            tagContent = payload.toString();
           }
-        },
-      );
+
+          final Map<String, dynamic> conductorData = json.decode(tagContent);
+          print("Tag NFC leído: $conductorData");
+
+          navigatorKey.currentState?.pushNamed(
+            '/minibus_payment',
+            arguments: conductorData,
+          );
+        } else {
+          print("El tag no contiene registros NDEF.");
+        }
+      } else {
+        print("El tag no soporta NDEF.");
+      }
+
+      await FlutterNfcKit.finish();
     } catch (e) {
-      print("Error al iniciar la sesión NFC: $e");
+      print("Error leyendo NFC: $e");
+      try {
+        await FlutterNfcKit.finish();
+      } catch (_) {}
     }
-  } else {
-    print("NFC no está disponible en este dispositivo.");
+
+    await Future.delayed(const Duration(seconds: 2));
   }
 }
