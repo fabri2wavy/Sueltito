@@ -23,6 +23,7 @@ dependencies:
   device_info_plus: ^10.1.0
   geolocator: ^11.0.0
   permission_handler: ^11.3.0
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:
@@ -35,3 +36,4 @@ flutter:
 
   assets:
     - assets/images/
+    - .env

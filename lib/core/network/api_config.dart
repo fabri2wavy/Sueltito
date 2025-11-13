@@ -1,6 +1,15 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class ApiConfig {
-  static const String baseUrl = 'http://192.168.1.21:3333/api';
+  // ✅ Leer desde .env con fallback
+  static String get baseUrl => 
+      dotenv.env['API_BASE_URL'] ?? 'https://backend-sueltito.onrender.com/api';
   
-  static const Duration connectTimeout = Duration(seconds: 10);
-  static const Duration receiveTimeout = Duration(seconds: 10);
+  static Duration get connectTimeout => Duration(
+    milliseconds: int.tryParse(dotenv.env['CONNECT_TIMEOUT'] ?? '10000') ?? 10000,
+  );
+  
+  static Duration get receiveTimeout => Duration(
+    milliseconds: int.tryParse(dotenv.env['RECEIVE_TIMEOUT'] ?? '10000') ?? 10000,
+  );
 }

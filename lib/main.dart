@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // <-- agregado
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart'; // ✅ Importar
 
 // Core
 import 'package:sueltito/core/config/app_theme.dart';
@@ -15,13 +16,19 @@ import 'package:sueltito/features/driver/presentation/pages/driver_home_page.dar
 // Feature: Main Navigation (Shell)
 import 'package:sueltito/features/main_navigation/presentation/pages/main_navigation_page.dart';
 
-// --- NUEVO IMPORT ---
+// Feature: Payment
 import 'package:sueltito/features/payment/presentation/pages/minibus_payment_page.dart';
 
-void main() {
+Future<void> main() async {
+  // ✅ Asegurar que Flutter esté inicializado
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // ✅ Cargar variables de entorno
+  await dotenv.load(fileName: ".env");
+  
   runApp(
-    ProviderScope( // <-- envuelve toda la app
-      child: const MainApp(),
+    const ProviderScope(
+      child: MainApp(),
     ),
   );
 }
