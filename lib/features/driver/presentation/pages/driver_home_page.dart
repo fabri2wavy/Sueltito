@@ -1,11 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/widgets/app_bottom_navigation.dart';
+import 'package:sueltito/core/navigation/constants/navigation_config.dart';
+import 'package:sueltito/core/navigation/presentation/providers/navigation_provider.dart';
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 
-class DriverHomePage extends StatelessWidget {
+class DriverHomePage extends ConsumerWidget {
   const DriverHomePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedIndex = ref.watch(navigationIndexProvider);
+    final navigationItems = NavigationConfig.getDriverItems();
+
+    return Scaffold(
+      body: IndexedStack(
+        index: selectedIndex,
+        children: navigationItems.map((item) => item.page).toList(),
+      ),
+      bottomNavigationBar: AppBottomNavigation(
+        currentIndex: selectedIndex,
+        onTap: (index) => ref.read(navigationIndexProvider.notifier).state = index,
+        items: navigationItems,
+      ),
+    );
+  }
+}
+
+// ✅ Contenido de la página sin Scaffold
+class DriverHomeContent extends ConsumerWidget {
+  const DriverHomeContent({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    final nombre = auth.value?.usuario.nombre ?? 'Usuario';
+
     return Scaffold(
       backgroundColor: AppColors.backgroundGreen,
       body: SafeArea(
@@ -24,7 +55,7 @@ class DriverHomePage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Bienvenido -',
+                            'Bienvenido $nombre',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -56,7 +87,8 @@ class DriverHomePage extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.directions_bus, color: Colors.white, size: 32),
+                        const Icon(Icons.directions_bus,
+                            color: Colors.white, size: 32),
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,9 +209,12 @@ class DriverHomePage extends StatelessWidget {
                     Expanded(
                       child: ListView(
                         children: [
-                          _buildCobroItem('Tramo Corto', '2 personas', 'Bs 4.80'),
-                          _buildCobroItem('Tramo Largo', '1 persona', 'Bs 3.00'),
-                          _buildCobroItem('Tramo Preferencia', '1 persona', 'Bs 2.00'),
+                          _buildCobroItem(
+                              'Tramo Corto', '2 personas', 'Bs 4.80'),
+                          _buildCobroItem(
+                              'Tramo Largo', '1 persona', 'Bs 3.00'),
+                          _buildCobroItem(
+                              'Tramo Preferencia', '1 persona', 'Bs 2.00'),
                         ],
                       ),
                     ),
@@ -189,25 +224,6 @@ class DriverHomePage extends StatelessWidget {
             ),
           ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 1,
-        selectedItemColor: AppColors.primaryGreen,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: 'Historial',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.menu),
-            label: 'Mas',
-          ),
-        ],
       ),
     );
   }

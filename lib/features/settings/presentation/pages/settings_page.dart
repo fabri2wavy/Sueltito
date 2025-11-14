@@ -5,6 +5,8 @@ import 'package:sueltito/core/config/app_theme.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sueltito/core/constants/roles.dart';
+import 'package:sueltito/core/navigation/presentation/providers/navigation_provider.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -12,13 +14,17 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
+    final currentUser = authState.value?.usuario;
+    final currentProfile = currentUser?.perfilActual;
+    final targetProfile = (currentProfile == null)
+        ? Roles.chofer
+        : Roles.oppositeOf(currentProfile);
 
     // Escuchar cuando el logout sea exitoso
     ref.listen<AsyncValue<AuthResponse?>>(authProvider, (previous, next) {
       next.whenData((response) {
         if (response == null) {
-          // Logout exitoso
-            context.go(AppPaths.welcome);
+          context.go(AppPaths.welcome);
         }
       });
     });
@@ -36,7 +42,6 @@ class SettingsPage extends ConsumerWidget {
         elevation: 0,
         actions: [
           IconButton(
-            // Icono de QR
             icon: Icon(Icons.qr_code, color: AppColors.primaryGreen),
             onPressed: () {},
           ),
@@ -88,16 +93,24 @@ class SettingsPage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 30),
+              // Cambiar de perfil (dinámico según el actual)
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: _buildSettingsRow(
-                  context,
-                  title: 'Cambiar a Conductor',
-                  onTap: () => _showSwitchRoleDialog(context),
-                  icon: Icons.swap_horiz_rounded,
+                child: ListTile(
+                  leading: Icon(
+                    Icons.swap_horiz_rounded,
+                    color: AppColors.primaryGreen,
+                  ),
+                  title: Text(
+                    'Cambiar a ${targetProfile == Roles.chofer ? 'Conductor' : 'Pasajero'}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () =>
+                      _showSwitchRoleDialog(context, ref, targetProfile),
                 ),
               ),
               const SizedBox(height: 30),
@@ -133,14 +146,12 @@ class SettingsPage extends ConsumerWidget {
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Cerrar Sesión'),
-          content: const Text(
-            '¿Estás seguro que deseas cerrar sesión?',
-          ),
+          content: const Text('¿Estás seguro que deseas cerrar sesión?'),
           actions: [
             TextButton(
               child: const Text('Cancelar'),
               onPressed: () {
-                  context.pop();
+                context.pop();
               },
             ),
             ElevatedButton(
@@ -150,8 +161,7 @@ class SettingsPage extends ConsumerWidget {
               ),
               child: const Text('Cerrar Sesión'),
               onPressed: () {
-             context.pop();
-                // Llamar al logout del provider
+                context.pop();
                 ref.read(authProvider.notifier).logout();
               },
             ),
@@ -161,20 +171,41 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  void _showSwitchRoleDialog(BuildContext context) {
+  void _showSwitchRoleDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String targetProfile,
+  ) {
+    final authState = ref.watch(authProvider);
+    final currentUser = authState.value?.usuario;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: Usuario no encontrado'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final humanTarget = targetProfile == Roles.chofer
+        ? 'Conductor'
+        : 'Pasajero';
+
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Confirmación'),
-          content: const Text(
-            '¿Seguro que quieres cambiar al perfil de Conductor?',
+          content: Text(
+            '¿Seguro que quieres cambiar al perfil de $humanTarget?',
           ),
           actions: [
             TextButton(
               child: const Text('Cancelar'),
               onPressed: () {
-                  context.pop();
+                context.pop();
               },
             ),
             ElevatedButton(
@@ -183,9 +214,50 @@ class SettingsPage extends ConsumerWidget {
                 foregroundColor: AppColors.textWhite,
               ),
               child: const Text('Confirmar'),
-              onPressed: () {
-            //  context.pop();
-            //  context.go(AppPaths.driverHome);
+              onPressed: () async {
+                context.pop();
+
+                try {
+                  // Cambiar el perfil
+                  await ref
+                      .read(authProvider.notifier)
+                      .changeProfile(currentUser.id, targetProfile);
+
+                  if (context.mounted) {
+                    ref.read(navigationIndexProvider.notifier).state = 1;
+                    
+                    // Navegar a la ruta por defecto del nuevo perfil
+                    final updatedAuth = ref.read(authProvider).value;
+                    if (updatedAuth != null) {
+                      final defaultRoute = updatedAuth.usuario.getDefaultRoute();
+                      context.go(defaultRoute);
+                      
+                      // Mostrar confirmación
+                      Future.delayed(const Duration(milliseconds: 500), () {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Perfil cambiado a $humanTarget'),
+                              backgroundColor: AppColors.primaryGreen,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      });
+                    }
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Error al cambiar perfil: ${e.toString()}',
+                        ),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
               },
             ),
           ],
@@ -210,10 +282,7 @@ class SettingsPage extends ConsumerWidget {
           : null,
       title: Text(
         title,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: titleColor,
-        ),
+        style: TextStyle(fontWeight: FontWeight.w600, color: titleColor),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,

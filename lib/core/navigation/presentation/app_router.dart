@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
-import 'package:sueltito/core/constants/roles.dart';
 import 'package:sueltito/core/navigation/constants/route_permissions.dart';
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 
@@ -42,10 +41,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
 
           if (loggedIn && (state.fullPath == AppPaths.login || state.fullPath == AppPaths.signUp)) {
-            final perfiles = resp.usuario.perfiles;
-            if (perfiles.contains(Roles.chofer)) return AppPaths.driverHome;
-            if (perfiles.contains(Roles.pasajero)) return AppPaths.passengerHome;
-            return AppPaths.welcome;
+            return resp.usuario.getDefaultRoute();
           }
 
           return null; 
@@ -83,7 +79,6 @@ String? _permissionGuard({
       
       final user = resp.usuario;
       final hasPermission = permission.hasPermission(
-        // userRoles: user.roles,
         userPerfiles: user.perfiles,
       );
       

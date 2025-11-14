@@ -49,4 +49,18 @@ class UserModel extends User {
       roles: entity.roles,
     );
   }
+
+  UserModel copyWith({
+    String? id,
+    String? nombre,
+    List<String>? perfiles,
+    List<String>? roles,
+  }) {
+    return UserModel(
+      id: id ?? this.id,
+      nombre: nombre ?? this.nombre,
+      perfiles: perfiles ?? this.perfiles,
+      roles: roles ?? this.roles,
+    );
+  }
 }
