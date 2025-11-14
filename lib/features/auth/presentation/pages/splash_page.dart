@@ -22,7 +22,6 @@ class _SplashPageState extends State<SplashPage> {
   Future<void> _initializeApp() async {
     await Future.delayed(const Duration(seconds: 3));
     if (mounted) {
-      // Navigator.pushReplacementNamed(context, '/welcome');
       context.go(AppPaths.welcome);
     }
   }

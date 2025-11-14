@@ -60,7 +60,6 @@ class RoutePermissions {
     ),
 
     // ===== PAYMENT ROUTES =====
-    // Payment status (accesible para pasajero y conductor)
     RouteConfig(
       path: AppPaths.paymentStatus,
       builder: (context, state) {
