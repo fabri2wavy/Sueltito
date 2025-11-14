@@ -8,6 +8,8 @@ class SueltitoTextField extends StatelessWidget {
   final bool readOnly;
   final VoidCallback? onTap;
   final Widget? suffixIcon;
+  final bool enabled;
+  final ValueChanged<String>? onChanged;
 
   const SueltitoTextField({
     super.key,
@@ -18,6 +20,8 @@ class SueltitoTextField extends StatelessWidget {
     this.readOnly = false,
     this.onTap,
     this.suffixIcon,
+    this.enabled = true,
+    this.onChanged,
   });
 
   @override
@@ -28,6 +32,8 @@ class SueltitoTextField extends StatelessWidget {
       obscureText: obscureText,
       readOnly: readOnly,
       onTap: onTap,
+      enabled: enabled,
+      onChanged: onChanged,
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: TextStyle(color: Colors.grey[500]),

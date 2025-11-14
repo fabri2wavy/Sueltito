@@ -19,7 +19,9 @@ class WelcomePage extends StatelessWidget {
               Center(child: Image.asset(logoWithTextPath, width: 230)),
               const Spacer(flex: 3),
               ElevatedButton(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.pushNamed(context, '/login');
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryYellow,
                   foregroundColor: const Color.fromARGB(255, 255, 255, 255),

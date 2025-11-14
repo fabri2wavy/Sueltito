@@ -1,11 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+
+    // Escuchar cuando el logout sea exitoso
+    ref.listen<AsyncValue<AuthResponse?>>(authProvider, (previous, next) {
+      next.whenData((response) {
+        if (response == null) {
+          // Logout exitoso
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/welcome',
+            (route) => false,
+          );
+        }
+      });
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -83,10 +101,64 @@ class SettingsPage extends StatelessWidget {
                   icon: Icons.swap_horiz_rounded,
                 ),
               ),
+              const SizedBox(height: 30),
+              // Botón Cerrar Sesión
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: _buildSettingsRow(
+                  context,
+                  title: 'Cerrar Sesión',
+                  onTap: authState.isLoading
+                      ? () {} // Deshabilitar si está cargando
+                      : () => _showLogoutDialog(context, ref),
+                  icon: Icons.logout,
+                  iconColor: Colors.red,
+                  titleColor: Colors.red,
+                  hideArrow: true,
+                ),
+              ),
+              const SizedBox(height: 30),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Cerrar Sesión'),
+          content: const Text(
+            '¿Estás seguro que deseas cerrar sesión?',
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancelar'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Cerrar Sesión'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                // Llamar al logout del provider
+                ref.read(authProvider.notifier).logout();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -133,12 +205,20 @@ class SettingsPage extends StatelessWidget {
     required VoidCallback onTap,
     bool hideArrow = false,
     IconData? icon,
+    Color? iconColor,
+    Color? titleColor,
   }) {
     return ListTile(
       leading: (icon != null)
-          ? Icon(icon, color: AppColors.primaryGreen)
+          ? Icon(icon, color: iconColor ?? AppColors.primaryGreen)
           : null,
-      title: Text(title, style: TextStyle(fontWeight: FontWeight.w600)),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: titleColor,
+        ),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

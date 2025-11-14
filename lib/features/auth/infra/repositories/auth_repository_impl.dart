@@ -1,0 +1,47 @@
+import '../../domain/entities/auth_response.dart';
+import '../../domain/entities/register_request.dart';
+import '../../domain/repositories/auth_repository.dart';
+import '../datasources/auth_local_ds.dart';
+import '../datasources/auth_remote_ds.dart';
+import '../models/register_request_model.dart';
+import '../models/user_model.dart';
+
+class AuthRepositoryImpl implements AuthRepository {
+  final AuthRemoteDataSource remoteDataSource;
+  final AuthLocalDataSource localDataSource;
+
+  AuthRepositoryImpl({
+    required this.remoteDataSource,
+    required this.localDataSource,
+  });
+
+  @override
+  Future<AuthResponse> login(String celular) async {
+    final responseModel = await remoteDataSource.login(celular);
+
+    await localDataSource.saveUser(responseModel.usuario as UserModel);
+
+    return responseModel.toEntity(); 
+  }
+
+  @override
+  Future<AuthResponse> register(RegisterRequest request) async {
+    final requestModel = RegisterRequestModel.fromEntity(request);
+    final responseModel = await remoteDataSource.register(requestModel);
+
+    // Guardar usuario localmente (sin token por ahora)
+    await localDataSource.saveUser(responseModel.usuario as UserModel);
+
+    return responseModel.toEntity();
+  }
+
+  @override
+  Future<void> logout() async {
+    await localDataSource.clearAuth();
+  }
+
+  @override
+  Future<bool> isAuthenticated() async {
+    return await localDataSource.isAuthenticated();
+  }
+}

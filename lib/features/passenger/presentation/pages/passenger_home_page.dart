@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 
 class PaymentOptionCard extends StatelessWidget {
   final IconData icon;
@@ -44,12 +46,16 @@ class PaymentOptionCard extends StatelessWidget {
   }
 }
 
-class PassengerHomePage extends StatelessWidget {
+class PassengerHomePage extends ConsumerWidget {
   const PassengerHomePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+
+    // Lee el usuario desde el provider de auth
+    final auth = ref.watch(authProvider);
+    final nombre = auth.value?.usuario.nombre?? 'Usuario';
 
     return Scaffold(
       appBar: AppBar(
@@ -65,7 +71,7 @@ class PassengerHomePage extends StatelessWidget {
         ),
         centerTitle: true,
         title: Text(
-          'Bienvenido Fabricio',
+          'Bienvenido $nombre',
           style: textTheme.headlineMedium?.copyWith(
             color: AppColors.primaryGreen,
             fontWeight: FontWeight.bold,
