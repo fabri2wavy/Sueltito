@@ -11,8 +11,10 @@ import 'package:sueltito/features/auth/presentation/pages/sign_up_page.dart';
 // Feature: Main Navigation (Shell)
 import 'package:sueltito/features/main_navigation/presentation/pages/main_navigation_page.dart';
 
-// --- NUEVO IMPORT ---
+// Feature: Payment
 import 'package:sueltito/features/payment/presentation/pages/minibus_payment_page.dart';
+import 'package:sueltito/features/payment/presentation/pages/payment_status_page.dart';
+import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 
 void main() {
   runApp(const MainApp());
@@ -33,6 +35,12 @@ class MainApp extends StatelessWidget {
         '/sign_up': (context) => const SignUpPage(),
         '/passenger_home': (context) => const MainNavigationPage(),
         '/minibus_payment': (context) => const MinibusPaymentPage(),
+
+        '/payment_status': (context) {
+          final PaymentStatus status =
+              ModalRoute.of(context)!.settings.arguments as PaymentStatus;
+          return PaymentStatusPage(status: status);
+        },
       },
     );
   }
