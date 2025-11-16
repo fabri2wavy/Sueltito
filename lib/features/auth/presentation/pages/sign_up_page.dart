@@ -92,7 +92,7 @@ class SignUpPage extends StatelessWidget {
               ),
               ElevatedButton(
                 onPressed: () {
-                  Navigator.pushReplacementNamed(context, '/passenger_home');
+                Navigator.pushReplacementNamed(context, '/nfc_scan');
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryGreen,
