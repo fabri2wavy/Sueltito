@@ -42,10 +42,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
 
           if (loggedIn && (state.fullPath == AppPaths.login || state.fullPath == AppPaths.signUp)) {
-            final perfiles = resp.usuario.perfiles;
-            if (perfiles.contains(Roles.chofer)) return AppPaths.driverHome;
-            if (perfiles.contains(Roles.pasajero)) return AppPaths.passengerHome;
-            return AppPaths.welcome;
+            return resp.usuario.getDefaultRoute();
           }
 
           return null; 

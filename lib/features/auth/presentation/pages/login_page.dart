@@ -39,7 +39,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 backgroundColor: AppColors.primaryGreen,
               ),
             );
-                context.go(AppPaths.passengerHome);
+            // ✅ Una sola línea, escalable
+            context.go(response.usuario.getDefaultRoute());
           }
         },
         error: (error, stack) {

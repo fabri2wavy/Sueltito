@@ -5,6 +5,7 @@ import '../../domain/entities/auth_response.dart';
 import '../../domain/entities/register_request.dart';
 import '../../domain/usecases/login_usecase.dart';
 import '../../domain/usecases/register_usecase.dart';
+import '../../domain/usecases/change_profile_usecase.dart';
 import '../../infra/datasources/auth_local_ds.dart';
 import '../../infra/datasources/auth_remote_ds.dart';
 import '../../infra/repositories/auth_repository_impl.dart';
@@ -13,6 +14,7 @@ import '../../infra/repositories/auth_repository_impl.dart';
 class AuthNotifier extends AsyncNotifier<AuthResponse?> {
   late final LoginUseCase _loginUseCase;
   late final RegisterUseCase _registerUseCase;
+  late final ChangeProfileUseCase _changeProfileUseCase;
   late final AuthRepositoryImpl _repository;
 
   @override
@@ -33,6 +35,7 @@ class AuthNotifier extends AsyncNotifier<AuthResponse?> {
     // Crear Use Cases
     _loginUseCase = LoginUseCase(_repository);
     _registerUseCase = RegisterUseCase(_repository);
+    _changeProfileUseCase = ChangeProfileUseCase(_repository);
 
     // Verificar autenticación inicial
     final isAuth = await _repository.isAuthenticated();
@@ -64,6 +67,33 @@ class AuthNotifier extends AsyncNotifier<AuthResponse?> {
 
     state = const AsyncLoading();
     state = await AsyncValue.guard(() => _registerUseCase(request));
+  }
+
+  Future<void> changeProfile(String userId, String newProfile) async {
+    state = const AsyncLoading();
+    
+    try {
+      final response = await _changeProfileUseCase(
+        userId: userId,
+        newProfile: newProfile,
+      );
+      
+      // Actualizar el estado con el usuario actualizado
+      // Necesitamos recargar el usuario completo
+      final currentAuth = state.value;
+      if (currentAuth != null) {
+        state = AsyncData(
+          AuthResponse(
+            continuarFlujo: response.continuarFlujo,
+            usuario: currentAuth.usuario,
+            message: response.message,
+          ),
+        );
+      }
+    } catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+      rethrow;
+    }
   }
 
   Future<void> logout() async {
