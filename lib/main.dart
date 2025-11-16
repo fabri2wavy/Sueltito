@@ -18,6 +18,8 @@ import 'package:sueltito/features/main_navigation/presentation/pages/main_naviga
 
 // Feature: Payment
 import 'package:sueltito/features/payment/presentation/pages/minibus_payment_page.dart';
+import 'package:sueltito/features/payment/presentation/pages/payment_status_page.dart';
+import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 
 Future<void> main() async {
   // ✅ Asegurar que Flutter esté inicializado
@@ -61,6 +63,11 @@ class MainApp extends StatelessWidget {
         '/passenger_home': (context) => const MainNavigationPage(),
         '/minibus_payment': (context) => const MinibusPaymentPage(),
         '/driver_home': (context) => const DriverHomePage(),
+        '/payment_status': (context) {
+          final PaymentStatus status =
+              ModalRoute.of(context)!.settings.arguments as PaymentStatus;
+          return PaymentStatusPage(status: status);
+        },
       },
     );
   }

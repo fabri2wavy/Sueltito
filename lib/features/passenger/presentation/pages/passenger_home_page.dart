@@ -114,7 +114,9 @@ class PassengerHomePage extends ConsumerWidget {
                     child: PaymentOptionCard(
                       icon: FontAwesomeIcons.taxi,
                       label: 'TRUFIS',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.pushNamed(context, '/trufi_payment');
+                      },
                     ),
                   ),
                   const SizedBox(width: 16),

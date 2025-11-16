@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:sueltito/core/config/app_theme.dart';
-import 'package:sueltito/core/widgets/sueltito_text_field.dart';
+import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
+import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
 
+// Definición de la clase Pasaje
 class Pasaje {
   final String nombre;
   final double precio;
@@ -18,12 +20,17 @@ class MinibusPaymentPage extends StatefulWidget {
 class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
   bool _isPreferencial = false;
   final List<Pasaje> _pasajesSeleccionados = [];
+
+  // --- NUEVA VARIABLE DE ESTADO ---
+  // true = próximo pago será exitoso, false = próximo pago será rechazado
+  bool _simulateSuccess = true;
+
+  // --- PRECIOS ---
   static const double _precioCorto = 2.40;
   static const double _precioCortoPref = 2.00;
   static const double _precioLargo = 3.00;
   static const double _precioLargoPref = 2.50;
 
-  // --- LÓGICA DE CÁLCULO ---
   double get precioActualCorto =>
       _isPreferencial ? _precioCortoPref : _precioCorto;
   double get precioActualLargo =>
@@ -31,7 +38,6 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
   double get totalAPagar =>
       _pasajesSeleccionados.fold(0.0, (sum, item) => sum + item.precio);
 
-  // --- LÓGICA DE ACCIONES ---
   void _addPasaje(String nombre, double precio) {
     setState(() {
       _pasajesSeleccionados.add(Pasaje(nombre: nombre, precio: precio));
@@ -51,7 +57,6 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. ÁREA SUPERIOR
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -62,15 +67,12 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                   const SizedBox(height: 24),
                   _buildFareSelection(context),
                   const SizedBox(height: 24),
-                  const SueltitoTextField(hintText: 'Código'),
-                  const SizedBox(height: 24),
                   _buildPayButton(context),
                   const SizedBox(height: 24),
                 ],
               ),
             ),
           ),
-          // 2. ÁREA INFERIOR (Resumen)
           _buildSummaryCard(context),
         ],
       ),
@@ -110,7 +112,7 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 'CEL: 6818794',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
@@ -131,6 +133,9 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
   }
 
   Widget _buildFareSelection(BuildContext context) {
+    bool hasCorto = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Corto');
+    bool hasLargo = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Largo');
+
     return Column(
       children: [
         Row(
@@ -153,7 +158,7 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                       _isPreferencial = value;
                     });
                   },
-                  activeThumbColor: AppColors.primaryGreen,
+                  activeColor: AppColors.primaryGreen,
                 ),
               ],
             ),
@@ -168,6 +173,7 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                 'Corto',
                 precioActualCorto,
                 () => _addPasaje('Tramo Corto', precioActualCorto),
+                isSelected: hasCorto,
               ),
             ),
             const SizedBox(width: 16),
@@ -177,6 +183,7 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                 'Largo',
                 precioActualLargo,
                 () => _addPasaje('Tramo Largo', precioActualLargo),
+                isSelected: hasLargo,
               ),
             ),
           ],
@@ -185,18 +192,19 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
     );
   }
 
-  // Botón de Tarifa
   Widget _buildFareButton(
     BuildContext context,
     String label,
     double price,
-    VoidCallback onPressed,
-  ) {
+    VoidCallback onPressed, {
+    required bool isSelected,
+  }) {
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primaryGreen,
-        foregroundColor: AppColors.textWhite,
+        backgroundColor: isSelected ? AppColors.primaryGreen : Colors.grey[300],
+        foregroundColor: isSelected ? Colors.white : Colors.black87,
+        elevation: 0,
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -215,59 +223,106 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
     );
   }
 
-  // Botón Grande de Pagar
+  // --- FUNCIÓN _buildPayButton MODIFICADA ---
   Widget _buildPayButton(BuildContext context) {
+    bool hasItems = _pasajesSeleccionados.isNotEmpty;
+
     return Column(
       children: [
         ElevatedButton(
-          onPressed: () {
-            // llamar al Payment UseCase
-          },
+          onPressed: hasItems
+              ? () {
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (dialogContext) {
+                      // Usamos dialogContext
+                      return PaymentConfirmationDialog(
+                        pasajes: _pasajesSeleccionados,
+                        total: totalAPagar,
+                        onConfirm: () async {
+                          // 1. Simular la API y determinar el estado
+                          print('Enviando pago...');
+                          await Future.delayed(
+                            const Duration(milliseconds: 500),
+                          );
+
+                          final PaymentStatus resultStatus;
+                          if (_simulateSuccess) {
+                            resultStatus = PaymentStatus.success;
+                          } else {
+                            resultStatus = PaymentStatus.rejected;
+                          }
+
+                          // 2. Alternar la simulación para el próximo clic
+                          setState(() {
+                            _simulateSuccess = !_simulateSuccess;
+                          });
+
+                          // 3. Cerrar el diálogo
+                          Navigator.of(dialogContext).pop();
+
+                          // 4. Navegar a la página de estado (usando el context de la página, no el del diálogo)
+                          Navigator.of(context).pushNamed(
+                            '/payment_status',
+                            arguments: resultStatus,
+                          );
+
+                          // 5. Limpiar la lista si el pago fue exitoso
+                          if (resultStatus == PaymentStatus.success) {
+                            setState(() {
+                              _pasajesSeleccionados.clear();
+                            });
+                          }
+                        },
+                      );
+                    },
+                  );
+                }
+              : null,
           style: ElevatedButton.styleFrom(
             shape: const CircleBorder(),
             padding: const EdgeInsets.all(24),
-            backgroundColor: const Color.fromARGB(255, 84, 209, 190),
+            backgroundColor: hasItems
+                ? const Color.fromARGB(255, 84, 209, 190)
+                : Colors.grey[400],
+            disabledBackgroundColor: Colors.grey[300],
+            disabledForegroundColor: Colors.grey[500],
           ),
-          child: const Icon(Icons.attach_money, color: Colors.white, size: 35),
+          child: const Icon(Icons.attach_money, size: 35),
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'ENVIAR',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: AppColors.primaryGreen,
+            color: hasItems ? AppColors.primaryGreen : Colors.grey,
           ),
         ),
       ],
     );
   }
 
-  // Tarjeta de Resumen
   Widget _buildSummaryCard(BuildContext context) {
-    // Agrupamos los pasajes para el resumen
     Map<String, int> pasajeCounts = {};
     for (var pasaje in _pasajesSeleccionados) {
       pasajeCounts[pasaje.nombre] = (pasajeCounts[pasaje.nombre] ?? 0) + 1;
     }
 
-    // Convertimos el map a una lista de widgets
     List<Widget> itemsWidget = pasajeCounts.entries.map((entry) {
       String nombre = entry.key;
       int cantidad = entry.value;
-      // Buscamos el precio original de este tipo de pasaje
       double precioUnitario = _pasajesSeleccionados
           .firstWhere((p) => p.nombre == nombre)
           .precio;
       double subtotal = cantidad * precioUnitario;
 
-      // Creamos el widget
       return _buildSummaryItem(
         context,
         nombre,
         '$cantidad persona${cantidad > 1 ? 's' : ''}',
         subtotal,
         () {
-          // Acción de quitar
           int indexToRemove = _pasajesSeleccionados.indexWhere(
             (p) => p.nombre == nombre,
           );
@@ -313,7 +368,6 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
             ),
           ...itemsWidget,
           const Divider(height: 32, thickness: 1),
-          // Total
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
