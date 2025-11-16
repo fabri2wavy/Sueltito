@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 
 class PaymentOptionCard extends StatelessWidget {
@@ -64,9 +66,9 @@ class PassengerHomePage extends ConsumerWidget {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.primaryGreen),
           onPressed: () {
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            }
+              if (context.canPop()) {
+                context.pop();
+              }
           },
         ),
         centerTitle: true,
@@ -104,7 +106,7 @@ class PassengerHomePage extends ConsumerWidget {
                       icon: FontAwesomeIcons.busSimple,
                       label: 'MINIBUS',
                       onTap: () {
-                        Navigator.pushNamed(context, '/minibus_payment');
+                          context.push(AppPaths.minibusPayment);
                       },
                     ),
                   ),

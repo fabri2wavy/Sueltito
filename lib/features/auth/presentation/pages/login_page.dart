@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/core/widgets/sueltito_text_field.dart';
 import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
 import '../providers/auth_provider.dart';
@@ -37,7 +39,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 backgroundColor: AppColors.primaryGreen,
               ),
             );
-            Navigator.pushReplacementNamed(context, '/passenger_home');
+                context.go(AppPaths.passengerHome);
           }
         },
         error: (error, stack) {
@@ -58,7 +60,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.textBlack),
-          onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -146,7 +148,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     onPressed: authState.isLoading
                         ? null
                         : () {
-                            Navigator.pushNamed(context, '/sign_up');
+                              context.push(AppPaths.signUp);
                           },
                     style: TextButton.styleFrom(
                       padding: EdgeInsets.zero,

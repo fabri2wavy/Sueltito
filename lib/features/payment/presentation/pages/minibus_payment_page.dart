@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
 
@@ -85,7 +87,7 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
       elevation: 0,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: AppColors.primaryGreen),
-        onPressed: () => Navigator.of(context).pop(),
+        onPressed: () => context.pop(),
       ),
       centerTitle: true,
       title: Text(
@@ -262,10 +264,10 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                           // 3. Cerrar el diálogo
                           Navigator.of(dialogContext).pop();
 
-                          // 4. Navegar a la página de estado (usando el context de la página, no el del diálogo)
-                          Navigator.of(context).pushNamed(
-                            '/payment_status',
-                            arguments: resultStatus,
+                          // 4. Navegar a la página de estado usando GoRouter
+                          context.go(
+                            AppPaths.paymentStatus,
+                            extra: resultStatus,
                           );
 
                           // 5. Limpiar la lista si el pago fue exitoso

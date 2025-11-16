@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 
@@ -16,10 +18,7 @@ class SettingsPage extends ConsumerWidget {
       next.whenData((response) {
         if (response == null) {
           // Logout exitoso
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            '/welcome',
-            (route) => false,
-          );
+            context.go(AppPaths.welcome);
         }
       });
     });
@@ -141,7 +140,7 @@ class SettingsPage extends ConsumerWidget {
             TextButton(
               child: const Text('Cancelar'),
               onPressed: () {
-                Navigator.of(dialogContext).pop();
+                  context.pop();
               },
             ),
             ElevatedButton(
@@ -151,7 +150,7 @@ class SettingsPage extends ConsumerWidget {
               ),
               child: const Text('Cerrar Sesión'),
               onPressed: () {
-                Navigator.of(dialogContext).pop();
+             context.pop();
                 // Llamar al logout del provider
                 ref.read(authProvider.notifier).logout();
               },
@@ -175,7 +174,7 @@ class SettingsPage extends ConsumerWidget {
             TextButton(
               child: const Text('Cancelar'),
               onPressed: () {
-                Navigator.of(dialogContext).pop();
+                  context.pop();
               },
             ),
             ElevatedButton(
@@ -185,11 +184,8 @@ class SettingsPage extends ConsumerWidget {
               ),
               child: const Text('Confirmar'),
               onPressed: () {
-                Navigator.of(dialogContext).pop();
-                // Si éxito:
-                //   Navigator.pushAndRemoveUntil(context, '/driver_home', (route) => false);
-                // Si error:
-                //   ScaffoldMessenger.of(context).showSnackBar(...)
+            //  context.pop();
+            //  context.go(AppPaths.driverHome);
               },
             ),
           ],
