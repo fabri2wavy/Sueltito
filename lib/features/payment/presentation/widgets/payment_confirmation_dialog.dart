@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sueltito/core/config/app_theme.dart';
-import 'package:sueltito/features/payment/presentation/pages/minibus_payment_page.dart';
+import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
 
 class PaymentConfirmationDialog extends StatelessWidget {
   final List<Pasaje> pasajes;
@@ -29,7 +29,6 @@ class PaymentConfirmationDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. Título
             Text(
               'Confirmación de Pago',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -39,8 +38,6 @@ class PaymentConfirmationDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-
-            // 2. Input del Código
             TextField(
               decoration: InputDecoration(
                 hintText: 'Introduzca el código que le llegó al celular.',
@@ -59,12 +56,9 @@ class PaymentConfirmationDialog extends StatelessWidget {
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 20),
-
-            // 3. Lista de Items (Resumen)
             ...pasajeCounts.entries.map((entry) {
               String nombre = entry.key;
               int cantidad = entry.value;
-              // Buscamos precio unitario
               double precioUnitario = pasajes
                   .firstWhere((p) => p.nombre == nombre)
                   .precio;
@@ -118,17 +112,12 @@ class PaymentConfirmationDialog extends StatelessWidget {
                 ),
               );
             }).toList(),
-
             const SizedBox(height: 20),
-
-            // 4. Botones de Acción
             Row(
               children: [
-                // Botón Cancelar
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () =>
-                        Navigator.of(context).pop(), // Cierra el diálogo
+                    onPressed: () => Navigator.of(context).pop(),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey[600],
                       foregroundColor: Colors.white,
@@ -142,7 +131,6 @@ class PaymentConfirmationDialog extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                // Botón Pagar
                 Expanded(
                   child: ElevatedButton(
                     onPressed: onConfirm,

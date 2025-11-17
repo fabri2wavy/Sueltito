@@ -4,52 +4,53 @@ import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart'
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
 
-class TrufiPaymentPage extends StatefulWidget {
-  const TrufiPaymentPage({super.key});
+class TaxiPaymentPage extends StatefulWidget {
+  const TaxiPaymentPage({super.key});
 
   @override
-  State<TrufiPaymentPage> createState() => _TrufiPaymentPageState();
+  State<TaxiPaymentPage> createState() => _TaxiPaymentPageState();
 }
 
-class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
-  bool _isPreferencial = false;
+class _TaxiPaymentPageState extends State<TaxiPaymentPage> {
   final List<Pasaje> _pasajesSeleccionados = [];
   bool _simulateSuccess = true;
+  final TextEditingController _montoController = TextEditingController();
+  String? _montoError;
 
-  // Precios de Trufi (con preferencial)
-  static const double _precioZonal = 2.50;
-  static const double _precioZonalPref = 2.00;
-  static const double _precioLargo = 3.00;
-  static const double _precioLargoPref = 2.50;
-  static const double _precioCorto = 2.80;
-  static const double _precioCortoPref = 2.30;
-  static const double _precioExtraLargo = 3.30;
-  static const double _precioExtraLargoPref = 2.80;
+  @override
+  void initState() {
+    super.initState();
+    _montoController.addListener(_actualizarMonto);
+  }
 
-  double get precioActualZonal =>
-      _isPreferencial ? _precioZonalPref : _precioZonal;
-  double get precioActualLargo =>
-      _isPreferencial ? _precioLargoPref : _precioLargo;
-  double get precioActualCorto =>
-      _isPreferencial ? _precioCortoPref : _precioCorto;
-  double get precioActualExtraLargo =>
-      _isPreferencial ? _precioExtraLargoPref : _precioExtraLargo;
+  @override
+  void dispose() {
+    _montoController.removeListener(_actualizarMonto);
+    _montoController.dispose();
+    super.dispose();
+  }
+
+  // --- LÓGICA ---
+  void _actualizarMonto() {
+    double? monto = double.tryParse(_montoController.text);
+    setState(() {
+      _pasajesSeleccionados.clear(); // Limpiamos la lista
+      if (monto != null && monto > 0) {
+        // Si el monto es válido, lo añadimos como el único pasaje
+        _pasajesSeleccionados.add(Pasaje(nombre: 'Pasaje Taxi', precio: monto));
+        _montoError = null;
+      } else if (_montoController.text.isNotEmpty) {
+        _montoError = "Monto inválido"; // Error si escriben "abc"
+      } else {
+        _montoError = null; // Sin error si está vacío
+      }
+    });
+  }
 
   double get totalAPagar =>
       _pasajesSeleccionados.fold(0.0, (sum, item) => sum + item.precio);
 
-  void _addPasaje(String nombre, double precio) {
-    setState(() {
-      _pasajesSeleccionados.add(Pasaje(nombre: nombre, precio: precio));
-    });
-  }
-
-  void _removePasaje(int index) {
-    setState(() {
-      _pasajesSeleccionados.removeAt(index);
-    });
-  }
-
+  // --- BUILD ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -65,15 +66,15 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
                 children: [
                   _buildDriverInfoCard(),
                   const SizedBox(height: 24),
-                  _buildFareSelection(context),
+                  _buildFareSelection(context), // <--- La sección clave
                   const SizedBox(height: 24),
-                  _buildPayButton(context),
+                  _buildPayButton(context), // <--- Funciona sin cambios
                   const SizedBox(height: 24),
                 ],
               ),
             ),
           ),
-          _buildSummaryCard(context),
+          _buildSummaryCard(context), // <--- Funciona sin cambios
         ],
       ),
     );
@@ -89,7 +90,7 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
       ),
       centerTitle: true,
       title: Text(
-        'Bienvenido al Trufi\nFabricio',
+        'Bienvenido al Taxi\nFabricio',
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
           color: AppColors.primaryGreen,
@@ -122,133 +123,56 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
               ),
             ],
           ),
-          const Icon(
-            Icons.directions_car,
-            size: 40,
-            color: AppColors.textBlack,
-          ),
+          const Icon(Icons.local_taxi, size: 40, color: AppColors.textBlack),
         ],
       ),
     );
   }
 
   Widget _buildFareSelection(BuildContext context) {
-    bool hasZonal = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Zonal');
-    bool hasLargo = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Largo');
-    bool hasCorto = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Corto');
-    bool hasExtraLargo = _pasajesSeleccionados.any(
-      (p) => p.nombre == 'Tramo Extra Largo',
-    );
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Elige tu tramo:',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            Row(
-              children: [
-                Text(
-                  'Tarifa Preferencial?',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                Switch(
-                  value: _isPreferencial,
-                  onChanged: (value) {
-                    setState(() {
-                      _isPreferencial = value;
-                    });
-                  },
-                  activeThumbColor: AppColors.primaryGreen,
-                ),
-              ],
-            ),
-          ],
+        Text(
+          'Ingrese el monto a Pagar',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(color: Colors.grey[800]),
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildFareButton(
-                context,
-                'Zonal',
-                precioActualZonal,
-                () => _addPasaje('Tramo Zonal', precioActualZonal),
-                isSelected: hasZonal,
-              ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _montoController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: AppColors.textBlack,
+          ),
+          decoration: InputDecoration(
+            hintText: '0.00',
+            hintStyle: TextStyle(color: Colors.grey[400]),
+            prefixText: 'Bs ',
+            prefixStyle: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[600],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildFareButton(
-                context,
-                'Largo',
-                precioActualLargo,
-                () => _addPasaje('Tramo Largo', precioActualLargo),
-                isSelected: hasLargo,
-              ),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              borderSide: BorderSide.none,
             ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildFareButton(
-                context,
-                'Corto',
-                precioActualCorto,
-                () => _addPasaje('Tramo Corto', precioActualCorto),
-                isSelected: hasCorto,
-              ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              borderSide: BorderSide.none,
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildFareButton(
-                context,
-                'Extra Largo',
-                precioActualExtraLargo,
-                () => _addPasaje('Tramo Extra Largo', precioActualExtraLargo),
-                isSelected: hasExtraLargo,
-              ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              borderSide: BorderSide(color: AppColors.primaryGreen, width: 2),
             ),
-          ],
+            errorText: _montoError,
+          ),
         ),
       ],
-    );
-  }
-
-  Widget _buildFareButton(
-    BuildContext context,
-    String label,
-    double price,
-    VoidCallback onPressed, {
-    required bool isSelected,
-  }) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected ? AppColors.primaryGreen : Colors.grey[300],
-        foregroundColor: isSelected ? Colors.white : Colors.black87,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          Text(
-            'Bs. ${price.toStringAsFixed(2)}',
-            style: const TextStyle(fontSize: 16),
-          ),
-        ],
-      ),
     );
   }
 
@@ -293,6 +217,7 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
                           if (resultStatus == PaymentStatus.success) {
                             setState(() {
                               _pasajesSeleccionados.clear();
+                              _montoController.clear();
                             });
                           }
                         },
@@ -344,12 +269,10 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
         '$cantidad persona${cantidad > 1 ? 's' : ''}',
         subtotal,
         () {
-          int indexToRemove = _pasajesSeleccionados.indexWhere(
-            (p) => p.nombre == nombre,
-          );
-          if (indexToRemove != -1) {
-            _removePasaje(indexToRemove);
-          }
+          setState(() {
+            _pasajesSeleccionados.clear();
+            _montoController.clear();
+          });
         },
       );
     }).toList();
@@ -383,7 +306,7 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
           const SizedBox(height: 16),
           if (_pasajesSeleccionados.isEmpty)
             const Text(
-              'Añade un tramo para comenzar...',
+              'Ingrese un monto para comenzar...',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey),
             ),

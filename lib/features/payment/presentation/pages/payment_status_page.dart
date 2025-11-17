@@ -16,10 +16,8 @@ class _PaymentStatusPageState extends State<PaymentStatusPage> {
   @override
   void initState() {
     super.initState();
-    // Temporizador de 3 segundos para redirigir
     Timer(const Duration(seconds: 3), () {
       if (mounted) {
-        // Limpia toda la pila de navegación y nos lleva al Home
         Navigator.of(context).pushNamedAndRemoveUntil(
           '/passenger_home',
           (Route<dynamic> route) => false,

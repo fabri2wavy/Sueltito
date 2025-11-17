@@ -2,13 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sueltito/core/config/app_theme.dart';
 import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
-
-// Definición de la clase Pasaje
-class Pasaje {
-  final String nombre;
-  final double precio;
-  Pasaje({required this.nombre, required this.precio});
-}
+import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
 
 class MinibusPaymentPage extends StatefulWidget {
   const MinibusPaymentPage({super.key});
@@ -20,12 +14,9 @@ class MinibusPaymentPage extends StatefulWidget {
 class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
   bool _isPreferencial = false;
   final List<Pasaje> _pasajesSeleccionados = [];
-
-  // --- NUEVA VARIABLE DE ESTADO ---
-  // true = próximo pago será exitoso, false = próximo pago será rechazado
   bool _simulateSuccess = true;
 
-  // --- PRECIOS ---
+  // --- PRECIOS ESPECÍFICOS PARA MINIBUS (SOLO CORTO Y LARGO) ---
   static const double _precioCorto = 2.40;
   static const double _precioCortoPref = 2.00;
   static const double _precioLargo = 3.00;
@@ -35,6 +26,7 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
       _isPreferencial ? _precioCortoPref : _precioCorto;
   double get precioActualLargo =>
       _isPreferencial ? _precioLargoPref : _precioLargo;
+
   double get totalAPagar =>
       _pasajesSeleccionados.fold(0.0, (sum, item) => sum + item.precio);
 
@@ -158,7 +150,7 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                       _isPreferencial = value;
                     });
                   },
-                  activeColor: AppColors.primaryGreen,
+                  activeThumbColor: AppColors.primaryGreen,
                 ),
               ],
             ),
@@ -223,7 +215,6 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
     );
   }
 
-  // --- FUNCIÓN _buildPayButton MODIFICADA ---
   Widget _buildPayButton(BuildContext context) {
     bool hasItems = _pasajesSeleccionados.isNotEmpty;
 
@@ -236,13 +227,10 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                     context: context,
                     barrierDismissible: false,
                     builder: (dialogContext) {
-                      // Usamos dialogContext
                       return PaymentConfirmationDialog(
                         pasajes: _pasajesSeleccionados,
                         total: totalAPagar,
                         onConfirm: () async {
-                          // 1. Simular la API y determinar el estado
-                          print('Enviando pago...');
                           await Future.delayed(
                             const Duration(milliseconds: 500),
                           );
@@ -254,21 +242,17 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                             resultStatus = PaymentStatus.rejected;
                           }
 
-                          // 2. Alternar la simulación para el próximo clic
                           setState(() {
                             _simulateSuccess = !_simulateSuccess;
                           });
 
-                          // 3. Cerrar el diálogo
                           Navigator.of(dialogContext).pop();
 
-                          // 4. Navegar a la página de estado (usando el context de la página, no el del diálogo)
                           Navigator.of(context).pushNamed(
                             '/payment_status',
                             arguments: resultStatus,
                           );
 
-                          // 5. Limpiar la lista si el pago fue exitoso
                           if (resultStatus == PaymentStatus.success) {
                             setState(() {
                               _pasajesSeleccionados.clear();
