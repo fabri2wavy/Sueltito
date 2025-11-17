@@ -102,9 +102,9 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // --- MODIFICADO: Le pasamos los datos del conductor ---
+                  // --- pasamos los datos del conductor ---
                   _buildDriverInfoCard(_conductorData!),
-                  // --- FIN MODIFICADO ---
+                  // ------
                   const SizedBox(height: 24),
                   _buildFareSelection(context),
                   const SizedBox(height: 24),
@@ -122,7 +122,7 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
-      // ... (tu AppBar no cambia)
+      // ...AppBar
       backgroundColor: Colors.transparent,
       elevation: 0,
       leading: IconButton(
@@ -262,7 +262,7 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
     VoidCallback onPressed, {
     required bool isSelected,
   }) {
-    // ... (Esta función no cambia)
+    // ...
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(

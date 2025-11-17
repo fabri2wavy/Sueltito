@@ -3,9 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
 import 'package:sueltito/core/config/app_theme.dart';
-// --- NUEVO: Import para guardar historial ---
 import 'package:shared_preferences/shared_preferences.dart';
-// --- FIN NUEVO ---
 
 class NfcScanPage extends StatefulWidget {
   const NfcScanPage({super.key});
@@ -16,6 +14,13 @@ class NfcScanPage extends StatefulWidget {
 
 class _NfcScanPageState extends State<NfcScanPage>
     with SingleTickerProviderStateMixin {
+  
+  // --- 1. ¡LA SOLUCIÓN AL AUTO-ESCANEO! ---
+  // Una variable 'static' NUNCA se reinicia, aunque la página se destruya
+  // y se vuelva a crear.
+  static bool _autoScanPerformed = false;
+  // --- FIN DE LA SOLUCIÓN ---
+
   bool scanning = false;
   bool success = false;
   String message = "Acerca el celular al punto de pago";
@@ -23,15 +28,12 @@ class _NfcScanPageState extends State<NfcScanPage>
   late AnimationController _controller;
   late Animation<double> _pulseAnimation;
 
-  // --- NUEVO: Variable para el historial ---
   List<Map<String, dynamic>> _ultimasTransacciones = [];
-  // --- FIN NUEVO ---
 
   @override
   void initState() {
     super.initState();
 
-    // Animación del pulso del icono
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -41,37 +43,43 @@ class _NfcScanPageState extends State<NfcScanPage>
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
 
-    // --- NUEVO: Cargar historial al iniciar ---
     _cargarHistorial();
-    // --- FIN NUEVO ---
 
-    // auto-start scan breve después de build
-    Future.delayed(const Duration(milliseconds: 300), _startScan);
+    // --- 2. LÓGICA DE INICIO MODIFICADA ---
+    if (!_autoScanPerformed) {
+      // Si es la primera vez, inicia el escaneo automático
+      Future.delayed(const Duration(milliseconds: 300), _startScan);
+      _autoScanPerformed = true; // Y marca que ya lo hiciste
+    } else {
+      // Si ya NO es la primera vez, asegúrate de que la UI
+      // esté en modo de reposo (mostrando "Acerca el celular...")
+      setState(() {
+        scanning = false;
+        message = "Acerca el celular al punto de pago";
+      });
+    }
+    // --- FIN DE LA MODIFICACIÓN ---
   }
 
-  // --- NUEVO: Función para cargar historial ---
   Future<void> _cargarHistorial() async {
     final prefs = await SharedPreferences.getInstance();
-    
-    // 1. Leemos la lista de JSONs en String
     final List<String> historialJson = prefs.getStringList('historial') ?? [];
-    
-    // 2. Decodificamos cada String a un Mapa (JSON)
     final List<Map<String, dynamic>> transacciones = historialJson.map((itemString) {
-      return json.decode(itemString) as Map<String, dynamic>;
-    }).toList();
+      try {
+        return json.decode(itemString) as Map<String, dynamic>;
+      } catch (e) {
+        return <String, dynamic>{}; // Devuelve mapa vacío si hay error
+      }
+    }).where((map) => map.isNotEmpty).toList(); // Filtra mapas vacíos
 
-    // 3. Ordenamos la lista completa por fecha (de más nuevo a más viejo)
     transacciones.sort((a, b) {
-      return b['timestamp'].compareTo(a['timestamp']);
+      return (b['timestamp'] ?? '').compareTo(a['timestamp'] ?? '');
     });
 
-    // 4. Guardamos en el estado SOLO LAS ÚLTIMAS 3
     setState(() {
       _ultimasTransacciones = transacciones.take(3).toList();
     });
   }
-  // --- FIN NUEVO ---
 
   @override
   void dispose() {
@@ -79,9 +87,8 @@ class _NfcScanPageState extends State<NfcScanPage>
     super.dispose();
   }
 
-  // --- MODIFICADO: Función de escaneo con "Enrutador Inteligente" ---
+  // --- 3. FUNCIÓN _startScan CON NAVEGACIÓN Y ERRORES CORREGIDOS ---
   Future<void> _startScan() async {
-    // Al (re)intentar, volvemos a cargar el historial por si acaso
     _cargarHistorial();
 
     if (scanning) return;
@@ -94,29 +101,16 @@ class _NfcScanPageState extends State<NfcScanPage>
     try {
       NFCTag tag = await FlutterNfcKit.poll(timeout: const Duration(seconds: 20));
 
+      // Lógica de lectura (tu código estaba bien)
       if (tag.ndefAvailable != true) {
-        setState(() {
-          message = "La tarjeta no contiene datos válidos";
-          scanning = false;
-        });
-        await FlutterNfcKit.finish();
-        return;
+        throw Exception("La tarjeta no contiene datos válidos");
       }
-
       List<dynamic> records =
           await FlutterNfcKit.readNDEFRecords(cached: false);
-
       if (records.isEmpty) {
-        setState(() {
-          message = "El tag está vacío";
-          scanning = false;
-        });
-        await FlutterNfcKit.finish();
-        return;
+        throw Exception("El tag está vacío");
       }
-
       final rec = records.first;
-
       String content;
       if (rec.payload is String) {
         content = rec.payload;
@@ -125,68 +119,77 @@ class _NfcScanPageState extends State<NfcScanPage>
       } else {
         content = rec.payload.toString();
       }
-
       final data = json.decode(content);
 
-      // --- INICIO DE LA LÓGICA DE ENRUTAMIENTO ---
+      // Lógica de enrutamiento (tu código estaba bien)
       final String? tipoTransporte = data['servicio']?['tipo_transporte'];
       String? rutaDestino;
-
-      // 2. Decidimos la ruta basada en el código
       switch (tipoTransporte) {
-        case '04': // Trufi (basado en tu JSON)
-          rutaDestino = '/trufis_payment';
-          break;
-        case '01': // (¡CONFIRMA ESTE CÓDIGO!)
-          rutaDestino = '/minibus_payment';
-          break;
-        case '02': // (¡CONFIRMA ESTE CÓDIGO!)
-          rutaDestino = '/taxi_payment';
-          break;
+        case '04': rutaDestino = '/trufis_payment'; break;
+        case '01': rutaDestino = '/minibus_payment'; break;
+        case '02': rutaDestino = '/taxi_payment'; break;
         default:
-          // El código no es reconocido
-          setState(() {
-            message = "Tag de transporte no reconocido";
-            scanning = false;
-          });
-          await FlutterNfcKit.finish();
-          return; // No navegamos
+          throw Exception("Tag de transporte no reconocido");
       }
-      // --- FIN DE LA LÓGICA DE ENRUTAMIENTO ---
 
-      setState(() {
-        success = true;
-        message = "Lectura correcta";
-      });
+      // Lógica de éxito visual (tu código estaba bien)
+      setState(() { success = true; message = "Lectura correcta"; });
       HapticFeedback.mediumImpact();
-
       await Future.delayed(const Duration(milliseconds: 650));
       await FlutterNfcKit.finish();
-
       if (!mounted) return;
 
-      // Navegamos a la RUTA DINÁMICA
-      Navigator.pushReplacementNamed(
+      // --- ¡LA NAVEGACIÓN CORRECTA! ---
+      // Usamos 'pushNamed' para "pausar" esta página
+      // y 'await' para esperar a que el usuario vuelva
+      await Navigator.pushNamed(
         context,
         rutaDestino,
         arguments: data,
       );
-    } catch (e) {
+
+      // ¡EL CÓDIGO SE REANUDA AQUÍ CUANDO VUELVES!
+      // Reseteamos la UI al modo "Reintentar"
       setState(() {
-        message = "Error: $e";
+        scanning = false;
+        success = false;
+        message = "Acerca el celular al punto de pago";
+      });
+      // --- FIN DE LA NAVEGACIÓN ---
+
+    } catch (e) {
+      // --- ¡MANEJO DE ERROR AMIGABLE! ---
+      String errorMessage;
+      
+      // Atrapamos el error 408 (Timeout) y le damos un mensaje
+      if (e is PlatformException && e.code == '408') {
+        errorMessage = "Tiempo de espera agotado. Intenta de nuevo.";
+      } 
+      // Atrapamos nuestros propios errores (ej. "Tag vacío")
+      else if (e is Exception) {
+        errorMessage = e.toString().replaceAll("Exception: ", "");
+      } 
+      // Cualquier otro error
+      else {
+        errorMessage = "Error desconocido. Intenta de nuevo.";
+      }
+
+      setState(() {
+        message = errorMessage; // Muestra el mensaje amigable
         scanning = false;
       });
+      
       try {
         await FlutterNfcKit.finish();
       } catch (_) {}
+      // --- FIN MANEJO DE ERROR ---
     }
   }
-  // --- FIN DE LA FUNCIÓN _startScan ---
 
   Widget _buildIconArea() {
-    // (Tu código de _buildIconArea no cambia, ya está perfecto)
+    // (Tu función está perfecta, se queda igual)
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 350),
+      duration: const Duration(milliseconds: 350), 
       child: success
           ? Icon(
               Icons.check_circle_rounded,
@@ -238,11 +241,12 @@ class _NfcScanPageState extends State<NfcScanPage>
 
   @override
   Widget build(BuildContext context) {
+    // (Tu build está perfecto, se queda igual)
     final textTheme = Theme.of(context).textTheme;
     final width = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFD7EFE6), // verde pastel suave
+      backgroundColor: const Color(0xFFD7EFE6),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -251,8 +255,6 @@ class _NfcScanPageState extends State<NfcScanPage>
       body: SafeArea(
         child: Column(
           children: [
-            // "Bienvenido!"
-            const SizedBox(height: 6),
             Align(
               alignment: Alignment.centerLeft,
               child: Padding(
@@ -266,10 +268,7 @@ class _NfcScanPageState extends State<NfcScanPage>
                 ),
               ),
             ),
-
             const SizedBox(height: 22),
-
-            // centro: icon + textos + boton
             Expanded(
               child: Center(
                 child: Column(
@@ -278,19 +277,14 @@ class _NfcScanPageState extends State<NfcScanPage>
                     _buildIconArea(),
                     const SizedBox(height: 18),
                     Text(
-                      // --- MODIFICADO: Usamos la variable de estado 'message' ---
-                      message,
+                      message, // Ahora muestra mensajes amigables
                       style: textTheme.headlineSmall?.copyWith(
                         color: AppColors.textBlack,
                         fontWeight: FontWeight.bold,
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 6),
-                    // (Texto "al punto de pago" eliminado para dar prioridad a 'message')
-                    const SizedBox(height: 28),
-
-                    // --- MODIFICADO: Botón con Spinner de Carga ---
+                    const SizedBox(height: 34),
                     ElevatedButton(
                       onPressed: scanning ? null : _startScan,
                       style: ElevatedButton.styleFrom(
@@ -302,12 +296,11 @@ class _NfcScanPageState extends State<NfcScanPage>
                           borderRadius: BorderRadius.circular(14),
                         ),
                         disabledBackgroundColor: AppColors.primaryGreen.withOpacity(0.7),
-                        minimumSize: const Size(180, 52), // Tamaño fijo
+                        minimumSize: const Size(180, 52),
                       ),
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: scanning
-                            // Estado 1: "Escaneando..."
                             ? const Row(
                                 key: ValueKey('scanning'),
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -327,7 +320,6 @@ class _NfcScanPageState extends State<NfcScanPage>
                                   ),
                                 ],
                               )
-                            // Estado 2: "Reintentar"
                             : const Text(
                                 "Reintentar",
                                 key: ValueKey('retry'),
@@ -335,13 +327,10 @@ class _NfcScanPageState extends State<NfcScanPage>
                               ),
                       ),
                     ),
-                    // --- FIN DE LA MODIFICACIÓN ---
                   ],
                 ),
               ),
             ),
-
-            // --- MODIFICADO: Tarjeta de historial dinámica ---
             Container(
               width: width * 0.88,
               margin: const EdgeInsets.only(bottom: 18),
@@ -360,15 +349,13 @@ class _NfcScanPageState extends State<NfcScanPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Últimas Transacciones", // Título actualizado
+                    "Últimas Transacciones",
                     style: textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: AppColors.primaryGreen,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  
-                  // Lógica de historial dinámico
                   if (_ultimasTransacciones.isEmpty)
                     const Center(
                       child: Padding(
@@ -403,7 +390,6 @@ class _NfcScanPageState extends State<NfcScanPage>
                         ),
                       );
                     }).toList(),
-                  // --- FIN DE LA MODIFICACIÓN ---
                 ],
               ),
             ),
