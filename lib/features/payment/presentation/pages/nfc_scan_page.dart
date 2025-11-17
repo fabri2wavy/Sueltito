@@ -44,80 +44,110 @@ class _NfcScanPageState extends State<NfcScanPage>
     super.dispose();
   }
 
-  Future<void> _startScan() async {
-    if (scanning) return;
-    setState(() {
-      scanning = true;
-      success = false;
-      message = "Esperando tarjeta...";
-    });
+// --- REEMPLAZA TU FUNCIÓN _startScan CON ESTA ---
+Future<void> _startScan() async {
+  if (scanning) return;
+  setState(() {
+    scanning = true;
+    success = false;
+    message = "Esperando tarjeta...";
+  });
 
-    try {
-      NFCTag tag = await FlutterNfcKit.poll(timeout: const Duration(seconds: 20));
+  try {
+    NFCTag tag = await FlutterNfcKit.poll(timeout: const Duration(seconds: 20));
 
-      if (tag.ndefAvailable != true) {
-        setState(() {
-          message = "La tarjeta no contiene datos válidos";
-          scanning = false;
-        });
-        await FlutterNfcKit.finish();
-        return;
-      }
-
-      List<dynamic> records =
-          await FlutterNfcKit.readNDEFRecords(cached: false);
-
-      if (records.isEmpty) {
-        setState(() {
-          message = "El tag está vacío";
-          scanning = false;
-        });
-        await FlutterNfcKit.finish();
-        return;
-      }
-
-      final rec = records.first;
-
-      String content;
-      if (rec.payload is String) {
-        content = rec.payload;
-      } else if (rec.payload is List<int>) {
-        content = utf8.decode(rec.payload);
-      } else {
-        content = rec.payload.toString();
-      }
-
-      final data = json.decode(content);
-
-      // éxito visual + vibración
+    if (tag.ndefAvailable != true) {
       setState(() {
-        success = true;
-        message = "Lectura correcta";
-      });
-      HapticFeedback.mediumImpact();
-
-      await Future.delayed(const Duration(milliseconds: 650));
-      await FlutterNfcKit.finish();
-
-      if (!mounted) return;
-
-      // navega reemplazando a la página de pago (mismo comportamiento que antes)
-      Navigator.pushReplacementNamed(
-        context,
-        '/minibus_payment',
-        arguments: data,
-      );
-    } catch (e) {
-      setState(() {
-        message = "Error: $e";
+        message = "La tarjeta no contiene datos válidos";
         scanning = false;
       });
-      try {
-        await FlutterNfcKit.finish();
-      } catch (_) {}
+      await FlutterNfcKit.finish();
+      return;
     }
-  }
 
+    List<dynamic> records =
+        await FlutterNfcKit.readNDEFRecords(cached: false);
+
+    if (records.isEmpty) {
+      setState(() {
+        message = "El tag está vacío";
+        scanning = false;
+      });
+      await FlutterNfcKit.finish();
+      return;
+    }
+
+    final rec = records.first;
+
+    String content;
+    if (rec.payload is String) {
+      content = rec.payload;
+    } else if (rec.payload is List<int>) {
+      content = utf8.decode(rec.payload);
+    } else {
+      content = rec.payload.toString();
+    }
+
+    final data = json.decode(content);
+
+    // --- INICIO DE LA NUEVA LÓGICA DE ENRUTAMIENTO ---
+
+    // 1. Extraemos el tipo de transporte del JSON
+    final String? tipoTransporte = data['servicio']?['tipo_transporte'];
+
+    String? rutaDestino; // La ruta a la que navegaremos
+
+    // 2. Decidimos la ruta basada en el código
+    switch (tipoTransporte) {
+      case '04': // '04' es Trufi (basado en tu JSON)
+        rutaDestino = '/trufis_payment';
+        break;
+      case '01': // (¡DEBES CONFIRMAR ESTE CÓDIGO!)
+        rutaDestino = '/minibus_payment';
+        break;
+      case '02': // (¡DEBES CONFIRMAR ESTE CÓDIGO!)
+        rutaDestino = '/taxi_payment';
+        break;
+      default:
+        // El código no es reconocido
+        setState(() {
+          message = "Tag de transporte no reconocido";
+          scanning = false;
+        });
+        await FlutterNfcKit.finish();
+        return; // No navegamos
+    }
+    // --- FIN DE LA NUEVA LÓGICA ---
+
+    // 3. (éxito visual + vibración)
+    setState(() {
+      success = true;
+      message = "Lectura correcta";
+    });
+    HapticFeedback.mediumImpact();
+
+    await Future.delayed(const Duration(milliseconds: 650));
+    await FlutterNfcKit.finish();
+
+    if (!mounted) return;
+
+    // 4. Navegamos a la RUTA DINÁMICA que decidimos
+    Navigator.pushReplacementNamed(
+      context,
+      rutaDestino, // <-- Ya no está "hard-codeado"
+      arguments: data,
+    );
+  } catch (e) {
+    setState(() {
+      message = "Error: $e";
+      scanning = false;
+    });
+    try {
+      await FlutterNfcKit.finish();
+    } catch (_) {}
+  }
+}
+// --- FIN DE LA FUNCIÓN REEMPLAZADA ---
   Widget _buildIconArea() {
     // AnimatedSwitcher muestra: tick (success) / loader (scanning) / icono (idle)
     return AnimatedSwitcher(
@@ -229,22 +259,57 @@ class _NfcScanPageState extends State<NfcScanPage>
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 28),
-                    ElevatedButton(
-                      onPressed: scanning ? null : _startScan,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryGreen,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 36, vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: Text(
-                        scanning ? "Escaneando..." : "Reintentar",
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
+                    // (Dentro de tu método build, en la Columna central)
+
+ElevatedButton(
+  onPressed: scanning ? null : _startScan,
+  style: ElevatedButton.styleFrom(
+    backgroundColor: AppColors.primaryGreen,
+    foregroundColor: Colors.white,
+    padding: const EdgeInsets.symmetric(
+        horizontal: 36, vertical: 14),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(14),
+    ),
+    // --- NUEVO: Estilo para cuando está deshabilitado ---
+    disabledBackgroundColor: AppColors.primaryGreen.withOpacity(0.7),
+    
+    // --- NUEVO: Fijar un tamaño mínimo para que no salte ---
+    minimumSize: const Size(180, 52), // (Ajusta el ancho (180) y alto (52))
+  ),
+  child: AnimatedSwitcher(
+    duration: const Duration(milliseconds: 300),
+    child: scanning
+        
+        // --- ESTADO 1: "Escaneando..." con Spinner ---
+        ? const Row(
+            key: ValueKey('scanning'),
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 3,
+                ),
+              ),
+              SizedBox(width: 16),
+              Text(
+                "Escaneando...",
+                style: TextStyle(fontSize: 16),
+              ),
+            ],
+          )
+        
+        // --- ESTADO 2: "Reintentar" ---
+        : const Text(
+            "Reintentar",
+            key: ValueKey('retry'),
+            style: TextStyle(fontSize: 16),
+          ),
+  ),
+),
                   ],
                 ),
               ),

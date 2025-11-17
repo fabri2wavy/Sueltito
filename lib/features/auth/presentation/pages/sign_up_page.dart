@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:sueltito/core/config/app_theme.dart';
 import 'package:sueltito/core/widgets/sueltito_text_field.dart';
+// (En sign_up_page.dart)
+import 'package:flutter/services.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -16,11 +18,17 @@ class _SignUpPageState extends State<SignUpPage> {
   final apellido2Ctrl = TextEditingController();
   final ciCtrl = TextEditingController();
   final complementoCtrl = TextEditingController();
-  final expedidoCtrl = TextEditingController();
+  // final expedidoCtrl = TextEditingController(); // Ya no se necesita, usamos _selectedExpedido
   final fechaCtrl = TextEditingController();
   final phoneCtrl = TextEditingController();
   final emailCtrl = TextEditingController();
-
+  
+  // --- Variable para el Dropdown ---
+  String? _selectedExpedido;
+  final List<String> _departamentos = [
+    'LP', 'SC', 'CB', 'CH', 'OR', 'PT', 'TJ', 'BN', 'PA'
+  ];
+  
   // PIN controllers
   final pinCtrl = List.generate(4, (_) => TextEditingController());
 
@@ -60,6 +68,10 @@ class _SignUpPageState extends State<SignUpPage> {
                       SueltitoTextField(
                         hintText: 'Nombre',
                         controller: nameCtrl,
+                        // --- FILTRO: Solo letras y espacios ---
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                        ],
                       ),
                       const SizedBox(height: 16),
 
@@ -70,6 +82,10 @@ class _SignUpPageState extends State<SignUpPage> {
                             child: SueltitoTextField(
                               hintText: 'Primer Apellido',
                               controller: apellido1Ctrl,
+                              // --- FILTRO: Solo letras y espacios ---
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                              ],
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -77,39 +93,70 @@ class _SignUpPageState extends State<SignUpPage> {
                             child: SueltitoTextField(
                               hintText: 'Segundo Apellido',
                               controller: apellido2Ctrl,
+                              // --- FILTRO: Solo letras y espacios ---
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                              ],
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
 
-                      // CI + Expedición
+                      // --- ARREGLADO: CI + Complemento (en una fila) ---
                       Row(
                         children: [
                           Expanded(
+                            flex: 3, // Damos más espacio al CI
                             child: SueltitoTextField(
                               hintText: 'C.I.',
                               controller: ciCtrl,
                               keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                             ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
+                            flex: 2, // Menos espacio para el complemento
                             child: SueltitoTextField(
-                              hintText: 'Expedido (LP)',
-                              controller: expedidoCtrl,
+                              hintText: 'Comple. (Opcional)',
+                              controller: complementoCtrl,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+                                LengthLimitingTextInputFormatter(3),
+                              ],
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
 
-                      // Complemento
-                      SueltitoTextField(
-                        hintText: 'Complemento (opcional)',
-                        controller: complementoCtrl,
+                      // --- ARREGLADO: Expedido (como Dropdown/ComboBox) ---
+                      DropdownButtonFormField<String>(
+                        value: _selectedExpedido,
+                        hint: const Text('Expedido en...'),
+                        decoration: InputDecoration(
+                          counterText: "",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        items: _departamentos.map((String depto) {
+                          return DropdownMenuItem<String>(
+                            value: depto,
+                            child: Text(depto),
+                          );
+                        }).toList(),
+                        onChanged: (String? newValue) {
+                          setState(() {
+                            _selectedExpedido = newValue;
+                          });
+                        },
                       ),
                       const SizedBox(height: 16),
+                      // --- FIN DE LA CORRECCIÓN ---
 
                       // Fecha de nacimiento
                       SueltitoTextField(
@@ -149,6 +196,11 @@ class _SignUpPageState extends State<SignUpPage> {
                         controller: phoneCtrl,
                         keyboardType: TextInputType.phone,
                         prefixText: "+591 ",
+                        // --- FILTRO: Solo números y límite de 8 ---
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(8),
+                        ],
                       ),
                       const SizedBox(height: 16),
 
@@ -180,6 +232,10 @@ class _SignUpPageState extends State<SignUpPage> {
                               maxLength: 1,
                               textAlign: TextAlign.center,
                               keyboardType: TextInputType.number,
+                              // --- FILTRO: Solo números ---
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
                               decoration: InputDecoration(
                                 counterText: "",
                                 border: OutlineInputBorder(
@@ -214,10 +270,15 @@ class _SignUpPageState extends State<SignUpPage> {
                   backgroundColor: AppColors.primaryGreen,
                   foregroundColor: AppColors.textWhite,
                   padding: const EdgeInsets.symmetric(vertical: 14),
+                  // --- ESTILO AÑADIDO: Ancho completo ---
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 child: const Text(
                   'Continuar',
-                  style: TextStyle(fontSize: 16),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
 

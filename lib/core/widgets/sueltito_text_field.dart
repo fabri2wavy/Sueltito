@@ -8,6 +8,7 @@ class SueltitoTextField extends StatelessWidget {
   final bool obscureText;
   final String? prefixText;
   final VoidCallback? onTap;
+  final List<TextInputFormatter>? inputFormatters;
 
   const SueltitoTextField({
     super.key,
@@ -17,6 +18,7 @@ class SueltitoTextField extends StatelessWidget {
     this.obscureText = false,
     this.prefixText,
     this.onTap,
+    this.inputFormatters,
   });
 
   @override
