@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
-
-// Core
 import 'package:sueltito/core/config/app_theme.dart';
 
-// Feature: Auth
+// --- IMPORTS DE AMBAS RAMAS (FUSIONADOS) ---
 import 'package:sueltito/features/auth/presentation/pages/splash_page.dart';
 import 'package:sueltito/features/auth/presentation/pages/welcome_page.dart';
 import 'package:sueltito/features/auth/presentation/pages/sign_up_page.dart';
-
-// Feature: Main Navigation
 import 'package:sueltito/features/main_navigation/presentation/pages/main_navigation_page.dart';
 
-// Feature: Payment
-import 'package:sueltito/features/payment/presentation/pages/trufis_payment_page.dart';
-import 'package:sueltito/features/payment/presentation/pages/nfc_scan_page.dart';
+// Imports de Pago
+import 'package:sueltito/features/payment/presentation/pages/nfc_scan_page.dart'; // <-- De tu rama
+import 'package:sueltito/features/payment/presentation/pages/minibus_payment_page.dart'; // <-- De origin/fabricio
+import 'package:sueltito/features/payment/presentation/pages/trufis_payment_page.dart'; // <-- De origin/fabricio
+import 'package:sueltito/features/payment/presentation/pages/taxi_payment_page.dart'; // <-- De origin/fabricio
+import 'package:sueltito/features/payment/presentation/pages/payment_status_page.dart'; // <-- De origin/fabricio
+import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart'; // <-- De origin/fabricio
+// --- FIN DE IMPORTS ---
+
 
 void main() async {
+  // Ambas ramas tenían esto, lo cual es correcto
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MainApp());
 }
@@ -30,13 +33,34 @@ class MainApp extends StatelessWidget {
       title: 'Sueltito',
       theme: getAppTheme(),
       home: const SplashPage(),
+      
+      // --- RUTAS FUSIONADAS ---
       routes: {
+        // Rutas de Auth
         '/welcome': (context) => const WelcomePage(),
         '/sign_up': (context) => const SignUpPage(),
+        
+        // Ruta principal
         '/passenger_home': (context) => const MainNavigationPage(),
-        '/minibus_payment': (context) => const TrufisPaymentPage(),
+        
+        // --- Rutas de Pago (¡TODAS JUNTAS!) ---
+        
+        // La página de escaneo (de tu rama)
         '/nfc_scan': (context) => const NfcScanPage(),
+        
+        // Las 3 páginas de pago (de origin/fabricio)
+        '/minibus_payment': (context) => const MinibusPaymentPage(),
+        '/trufis_payment': (context) => const TrufiPaymentPage(),
+        '/taxi_payment': (context) => const TaxiPaymentPage(),
+        
+        // La página de estado de pago (de origin/fabricio)
+        '/payment_status': (context) {
+          final PaymentStatus status =
+              ModalRoute.of(context)!.settings.arguments as PaymentStatus;
+          return PaymentStatusPage(status: status);
+        },
       },
+      // --- FIN DE RUTAS ---
     );
   }
 }

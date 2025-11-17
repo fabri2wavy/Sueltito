@@ -108,7 +108,9 @@ class PassengerHomePage extends StatelessWidget {
                     child: PaymentOptionCard(
                       icon: FontAwesomeIcons.taxi,
                       label: 'TRUFIS',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.pushNamed(context, '/trufis_payment');
+                      },
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -117,7 +119,9 @@ class PassengerHomePage extends StatelessWidget {
                     child: PaymentOptionCard(
                       icon: FontAwesomeIcons.carSide,
                       label: 'TAXI',
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.pushNamed(context, '/taxi_payment');
+                      },
                     ),
                   ),
                 ],
