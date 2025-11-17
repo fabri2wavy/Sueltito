@@ -4,6 +4,7 @@ import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart'
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
 
+
 class TaxiPaymentPage extends StatefulWidget {
   const TaxiPaymentPage({super.key});
 
