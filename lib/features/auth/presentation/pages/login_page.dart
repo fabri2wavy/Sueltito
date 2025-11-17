@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/core/widgets/sueltito_text_field.dart';
+import 'package:sueltito/core/services/notification_service.dart';
 import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
 import '../providers/auth_provider.dart';
 
@@ -28,28 +29,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final textTheme = Theme.of(context).textTheme;
     final authState = ref.watch(authProvider);
 
-    // Escuchar cambios en el estado
-    ref.listen<AsyncValue<AuthResponse?>>(authProvider, (previous, next) {
+  // Escuchar cambios en el estado
+  final notificationService = ref.read(notificationServiceProvider);
+  ref.listen<AsyncValue<AuthResponse?>>(authProvider, (previous, next) {
       next.when(
         data: (response) {
           if (response != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Login exitoso'),
-                backgroundColor: AppColors.primaryGreen,
-              ),
-            );
+            notificationService.showSuccess('Login exitoso');
             // ✅ Una sola línea, escalable
             context.go(response.usuario.getDefaultRoute());
           }
         },
         error: (error, stack) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(error.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red,
-            ),
-          );
+          notificationService.showError(error.toString().replaceAll('Exception: ', ''));
         },
         loading: () {},
       );
@@ -113,12 +105,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         if (celular.isNotEmpty) {
                           ref.read(authProvider.notifier).login(celular);
                         } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Ingresa tu número de celular'),
-                              backgroundColor: Colors.orange,
-                            ),
-                          );
+                          ref.read(notificationServiceProvider).showWarning('Ingresa tu número de celular');
                         }
                       },
                 style: ElevatedButton.styleFrom(

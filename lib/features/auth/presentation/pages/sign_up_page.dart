@@ -6,6 +6,7 @@ import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/core/widgets/sueltito_text_field.dart';
 import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
 import '../providers/auth_provider.dart';
+import 'package:sueltito/core/services/notification_service.dart';
 import '../providers/register_provider.dart';
 
 class SignUpPage extends ConsumerStatefulWidget {
@@ -34,15 +35,11 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
 
   Future<void> _handleRegister() async {
     try {
-      // ✅ Pasar el context para obtener info del dispositivo
       await ref.read(registerFormProvider.notifier).submitRegister(context);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.orange,
-          ),
+        ref.read(notificationServiceProvider).showWarning(
+          e.toString().replaceAll('Exception: ', ''),
         );
       }
     }
@@ -60,26 +57,17 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
     final authState = ref.watch(authProvider);
 
     // Escuchar cambios en el estado de auth
+    final notificationService = ref.read(notificationServiceProvider);
     ref.listen<AsyncValue<AuthResponse?>>(authProvider, (previous, next) {
       next.when(
         data: (response) {
           if (response != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Registro exitoso'),
-                backgroundColor: AppColors.primaryGreen,
-              ),
-            );
+            notificationService.showSuccess('Registro exitoso');
                 context.go(AppPaths.passengerHome);
           }
         },
         error: (error, stack) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(error.toString().replaceAll('Exception: ', '')),
-              backgroundColor: Colors.red,
-            ),
-          );
+          notificationService.showError(error.toString().replaceAll('Exception: ', ''));
         },
         loading: () {},
       );

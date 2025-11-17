@@ -7,6 +7,7 @@ import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 import 'package:sueltito/core/constants/roles.dart';
 import 'package:sueltito/core/navigation/presentation/providers/navigation_provider.dart';
+import 'package:sueltito/core/services/notification_service.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -180,11 +181,8 @@ class SettingsPage extends ConsumerWidget {
     final currentUser = authState.value?.usuario;
 
     if (currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error: Usuario no encontrado'),
-          backgroundColor: Colors.red,
-        ),
+      ref.read(notificationServiceProvider).showError(
+        'Error: Usuario no encontrado',
       );
       return;
     }
@@ -217,6 +215,8 @@ class SettingsPage extends ConsumerWidget {
               onPressed: () async {
                 context.pop();
 
+                final notificationService = ref.read(notificationServiceProvider);
+
                 try {
                   // Cambiar el perfil
                   await ref
@@ -234,29 +234,19 @@ class SettingsPage extends ConsumerWidget {
                       
                       // Mostrar confirmación
                       Future.delayed(const Duration(milliseconds: 500), () {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Perfil cambiado a $humanTarget'),
-                              backgroundColor: AppColors.primaryGreen,
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        }
+                        notificationService.showSuccess(
+                          'Perfil cambiado a $humanTarget',
+                          duration: const Duration(seconds: 2),
+                        );
                       });
                     }
                   }
                 } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Error al cambiar perfil: ${e.toString()}',
-                        ),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
+                    if (context.mounted) {
+                      notificationService.showError(
+                        'Error al cambiar perfil: ${e.toString()}',
+                      );
+                    }
                 }
               },
             ),

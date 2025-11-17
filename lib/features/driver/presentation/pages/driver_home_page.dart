@@ -162,13 +162,9 @@ class DriverHomeContent extends ConsumerWidget {
               ),
             ),
 
-            const SizedBox(height: 24),
-
-            // Últimos cobros (estilo historial como PassengerHomePage)
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(20),
-                // Remove white background to match passenger UI. Card below will be the white element.
                 child: Column(
                   children: [
                     Row(
