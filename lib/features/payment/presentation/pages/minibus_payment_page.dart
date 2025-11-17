@@ -262,7 +262,7 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                           });
 
                           // 3. Cerrar el diálogo
-                          Navigator.of(dialogContext).pop();
+                          dialogContext.pop();
 
                           // 4. Navegar a la página de estado usando GoRouter
                           context.go(

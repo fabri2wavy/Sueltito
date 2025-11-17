@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sueltito/features/payment/presentation/pages/minibus_payment_page.dart';
 
 class PaymentConfirmationDialog extends StatelessWidget {
@@ -127,8 +128,7 @@ class PaymentConfirmationDialog extends StatelessWidget {
                 // Botón Cancelar
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () =>
-                        Navigator.of(context).pop(), // Cierra el diálogo
+                      onPressed: () => context.pop(), // Cierra el diálogo
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey[600],
                       foregroundColor: Colors.white,

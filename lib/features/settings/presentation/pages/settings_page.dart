@@ -193,64 +193,93 @@ class SettingsPage extends ConsumerWidget {
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Confirmación'),
-          content: Text(
-            '¿Seguro que quieres cambiar al perfil de $humanTarget?',
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Cancelar'),
-              onPressed: () {
-                context.pop();
-              },
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryGreen,
-                foregroundColor: AppColors.textWhite,
-              ),
-              child: const Text('Confirmar'),
-              onPressed: () async {
-                context.pop();
+        return Consumer(
+          builder: (context2, dialogRef, _) {
+            final isLoading = dialogRef.watch(authProvider).isLoading;
 
-                final notificationService = ref.read(notificationServiceProvider);
+            return AlertDialog(
+              title: const Text('Confirmación'),
+              content: isLoading
+                  ? Row(
+                      children: const [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(child: Text('Cambiando perfil...')),
+                      ],
+                    )
+                  : Text('¿Seguro que quieres cambiar al perfil de $humanTarget?'),
+              actions: [
+                TextButton(
+                  child: const Text('Cancelar'),
+                  onPressed: isLoading ? null : () => dialogContext.pop(),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    foregroundColor: AppColors.textWhite,
+                  ),
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          // We read the notifier through dialogRef. This avoids using
+                          // the outer `ref` in an async callback after widget disposal.
+                          final notificationService =
+                              dialogRef.read(notificationServiceProvider);
 
-                try {
-                  // Cambiar el perfil
-                  await ref
-                      .read(authProvider.notifier)
-                      .changeProfile(currentUser.id, targetProfile);
+                          try {
+                            await dialogRef
+                                .read(authProvider.notifier)
+                                .changeProfile(currentUser.id, targetProfile);
 
-                  if (context.mounted) {
-                    ref.read(navigationIndexProvider.notifier).state = 1;
-                    
-                    // Navegar a la ruta por defecto del nuevo perfil
-                    final updatedAuth = ref.read(authProvider).value;
-                    if (updatedAuth != null) {
-                      final defaultRoute = updatedAuth.usuario.getDefaultRoute();
-                      context.go(defaultRoute);
-                      
-                      // Mostrar confirmación
-                      Future.delayed(const Duration(milliseconds: 500), () {
-                        notificationService.showSuccess(
-                          'Perfil cambiado a $humanTarget',
-                          duration: const Duration(seconds: 2),
-                        );
-                      });
-                    }
-                  }
-                } catch (e) {
-                    if (context.mounted) {
-                      notificationService.showError(
-                        'Error al cambiar perfil: ${e.toString()}',
-                      );
-                    }
-                }
-              },
-            ),
-          ],
+                            // Close the dialog when finished successfully
+                            dialogContext.pop();
+
+                            if (context.mounted) {
+                              dialogRef.read(navigationIndexProvider.notifier).state = 1;
+
+                              final updatedAuth = dialogRef.read(authProvider).value;
+                              if (updatedAuth != null) {
+                                final defaultRoute =
+                                    updatedAuth.usuario.getDefaultRoute();
+                                context.go(defaultRoute);
+
+                                notificationService.showSuccess(
+                                  'Perfil cambiado a $humanTarget',
+                                  duration: const Duration(seconds: 2),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            // The provider will be in error state; show the
+                            // notification and keep the dialog closed.
+                            notificationService.showError(
+                              'Error al cambiar perfil: ${e.toString()}',
+                            );
+                            // Close the dialog even on error so user can retry
+                            dialogContext.pop();
+                          }
+                        },
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white),
+                          ),
+                        )
+                      : const Text('Confirmar'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
