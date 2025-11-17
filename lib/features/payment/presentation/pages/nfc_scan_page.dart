@@ -88,103 +88,102 @@ class _NfcScanPageState extends State<NfcScanPage>
   }
 
   // --- 3. FUNCIÓN _startScan CON NAVEGACIÓN Y ERRORES CORREGIDOS ---
-  Future<void> _startScan() async {
-    _cargarHistorial();
+// (En tu archivo nfc_scan_page.dart)
 
-    if (scanning) return;
+Future<void> _startScan() async {
+  _cargarHistorial();
+
+  if (scanning) return;
+  setState(() {
+    scanning = true;
+    success = false;
+    message = "Esperando tarjeta...";
+  });
+
+  try {
+    NFCTag tag = await FlutterNfcKit.poll(timeout: const Duration(seconds: 20));
+
+    // (Tu lógica de NDEF, records, y content está perfecta)
+    if (tag.ndefAvailable != true) {
+      throw Exception("La tarjeta no contiene datos válidos");
+    }
+    List<dynamic> records =
+        await FlutterNfcKit.readNDEFRecords(cached: false);
+    if (records.isEmpty) {
+      throw Exception("El tag está vacío");
+    }
+    final rec = records.first;
+    String content;
+    if (rec.payload is String) {
+      content = rec.payload;
+    } else if (rec.payload is List<int>) {
+      content = utf8.decode(rec.payload);
+    } else {
+      content = rec.payload.toString();
+    }
+    final data = json.decode(content);
+
+    // --- ¡AQUÍ ESTÁ LA ACTUALIZACIÓN BASADA EN TU IMAGEN! ---
+    
+    final String? tipoTransporte = data['servicio']?['tipo_transporte'];
+    String? rutaDestino;
+
+    switch (tipoTransporte) {
+      case '01': // <-- Código 01 = MINIBUS
+        rutaDestino = '/minibus_payment';
+        break;
+      case '02': // <-- Código 02 = TRUFI
+        rutaDestino = '/trufis_payment';
+        break;
+      case '03': // <-- Código 03 = TAXI
+        rutaDestino = '/taxi_payment';
+        break;
+      default:
+        // Si el código es "04" (o cualquier otro), es un error
+        throw Exception("Tag de transporte no reconocido");
+    }
+    // --- FIN DE LA ACTUALIZACIÓN ---
+
+    // (Tu lógica de éxito visual está perfecta)
+    setState(() { success = true; message = "Lectura correcta"; });
+    HapticFeedback.mediumImpact();
+    await Future.delayed(const Duration(milliseconds: 650));
+    await FlutterNfcKit.finish();
+    if (!mounted) return;
+
+    // (Tu lógica de navegación "await pushNamed" está perfecta)
+    await Navigator.pushNamed(
+      context,
+      rutaDestino,
+      arguments: data,
+    );
+
+    // (Tu lógica de reseteo de UI está perfecta)
     setState(() {
-      scanning = true;
+      scanning = false;
       success = false;
-      message = "Esperando tarjeta...";
+      message = "Acerca el celular al punto de pago";
     });
 
-    try {
-      NFCTag tag = await FlutterNfcKit.poll(timeout: const Duration(seconds: 20));
-
-      // Lógica de lectura (tu código estaba bien)
-      if (tag.ndefAvailable != true) {
-        throw Exception("La tarjeta no contiene datos válidos");
-      }
-      List<dynamic> records =
-          await FlutterNfcKit.readNDEFRecords(cached: false);
-      if (records.isEmpty) {
-        throw Exception("El tag está vacío");
-      }
-      final rec = records.first;
-      String content;
-      if (rec.payload is String) {
-        content = rec.payload;
-      } else if (rec.payload is List<int>) {
-        content = utf8.decode(rec.payload);
-      } else {
-        content = rec.payload.toString();
-      }
-      final data = json.decode(content);
-
-      // Lógica de enrutamiento (tu código estaba bien)
-      final String? tipoTransporte = data['servicio']?['tipo_transporte'];
-      String? rutaDestino;
-      switch (tipoTransporte) {
-        case '04': rutaDestino = '/trufis_payment'; break;
-        case '01': rutaDestino = '/minibus_payment'; break;
-        case '02': rutaDestino = '/taxi_payment'; break;
-        default:
-          throw Exception("Tag de transporte no reconocido");
-      }
-
-      // Lógica de éxito visual (tu código estaba bien)
-      setState(() { success = true; message = "Lectura correcta"; });
-      HapticFeedback.mediumImpact();
-      await Future.delayed(const Duration(milliseconds: 650));
-      await FlutterNfcKit.finish();
-      if (!mounted) return;
-
-      // --- ¡LA NAVEGACIÓN CORRECTA! ---
-      // Usamos 'pushNamed' para "pausar" esta página
-      // y 'await' para esperar a que el usuario vuelva
-      await Navigator.pushNamed(
-        context,
-        rutaDestino,
-        arguments: data,
-      );
-
-      // ¡EL CÓDIGO SE REANUDA AQUÍ CUANDO VUELVES!
-      // Reseteamos la UI al modo "Reintentar"
-      setState(() {
-        scanning = false;
-        success = false;
-        message = "Acerca el celular al punto de pago";
-      });
-      // --- FIN DE LA NAVEGACIÓN ---
-
-    } catch (e) {
-      // --- ¡MANEJO DE ERROR AMIGABLE! ---
-      String errorMessage;
-      
-      // Atrapamos el error 408 (Timeout) y le damos un mensaje
-      if (e is PlatformException && e.code == '408') {
-        errorMessage = "Tiempo de espera agotado. Intenta de nuevo.";
-      } 
-      // Atrapamos nuestros propios errores (ej. "Tag vacío")
-      else if (e is Exception) {
-        errorMessage = e.toString().replaceAll("Exception: ", "");
-      } 
-      // Cualquier otro error
-      else {
-        errorMessage = "Error desconocido. Intenta de nuevo.";
-      }
-
-      setState(() {
-        message = errorMessage; // Muestra el mensaje amigable
-        scanning = false;
-      });
-      
-      try {
-        await FlutterNfcKit.finish();
-      } catch (_) {}
-      // --- FIN MANEJO DE ERROR ---
+  } catch (e) {
+    // (Tu lógica de 'catch' está perfecta)
+    String errorMessage;
+    if (e is PlatformException && e.code == '408') {
+      errorMessage = "Tiempo de espera agotado. Intenta de nuevo.";
+    } else if (e is Exception) {
+      errorMessage = e.toString().replaceAll("Exception: ", "");
+    } else {
+      errorMessage = "Error desconocido. Intenta de nuevo.";
     }
+    setState(() {
+      message = errorMessage;
+      scanning = false;
+    });
+    try {
+      await FlutterNfcKit.finish();
+    } catch (_) {}
   }
+}
 
   Widget _buildIconArea() {
     // (Tu función está perfecta, se queda igual)
