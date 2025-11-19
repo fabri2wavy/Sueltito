@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
 
 const String logoBusPath = 'assets/images/logo_with_text.png';
 
@@ -20,7 +22,7 @@ class _SplashPageState extends State<SplashPage> {
   Future<void> _initializeApp() async {
     await Future.delayed(const Duration(seconds: 3));
     if (mounted) {
-      Navigator.pushReplacementNamed(context, '/welcome');
+      context.go(AppPaths.welcome);
     }
   }
 

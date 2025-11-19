@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 
 class PaymentOptionCard extends StatelessWidget {
   final IconData icon;
@@ -44,12 +48,16 @@ class PaymentOptionCard extends StatelessWidget {
   }
 }
 
-class PassengerHomePage extends StatelessWidget {
+class PassengerHomePage extends ConsumerWidget {
   const PassengerHomePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+
+    // Lee el usuario desde el provider de auth
+    final auth = ref.watch(authProvider);
+    final nombre = auth.value?.usuario.nombre?? 'Usuario';
 
     return Scaffold(
       appBar: AppBar(
@@ -58,14 +66,14 @@ class PassengerHomePage extends StatelessWidget {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.primaryGreen),
           onPressed: () {
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            }
+              if (context.canPop()) {
+                context.pop();
+              }
           },
         ),
         centerTitle: true,
         title: Text(
-          'Bienvenido Fabricio',
+          'Bienvenido $nombre',
           style: textTheme.headlineMedium?.copyWith(
             color: AppColors.primaryGreen,
             fontWeight: FontWeight.bold,
@@ -98,7 +106,7 @@ class PassengerHomePage extends StatelessWidget {
                       icon: FontAwesomeIcons.busSimple,
                       label: 'MINIBUS',
                       onTap: () {
-                        Navigator.pushNamed(context, '/minibus_payment');
+                          context.push(AppPaths.minibusPayment);
                       },
                     ),
                   ),
@@ -109,7 +117,7 @@ class PassengerHomePage extends StatelessWidget {
                       icon: FontAwesomeIcons.taxi,
                       label: 'TRUFIS',
                       onTap: () {
-                        Navigator.pushNamed(context, '/trufis_payment');
+                        context.push(AppPaths.trufisPayment);
                       },
                     ),
                   ),
@@ -120,7 +128,7 @@ class PassengerHomePage extends StatelessWidget {
                       icon: FontAwesomeIcons.carSide,
                       label: 'TAXI',
                       onTap: () {
-                        Navigator.pushNamed(context, '/taxi_payment');
+                        context.push(AppPaths.taxiPayment);
                       },
                     ),
                   ),

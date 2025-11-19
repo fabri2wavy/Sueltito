@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
 
 const String logoWithTextPath = 'assets/images/logo_with_text.png';
 
@@ -19,7 +21,9 @@ class WelcomePage extends StatelessWidget {
               Center(child: Image.asset(logoWithTextPath, width: 230)),
               const Spacer(flex: 3),
               ElevatedButton(
-                onPressed: () {},
+                onPressed: () {
+              context.push(AppPaths.login);
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryYellow,
                   foregroundColor: const Color.fromARGB(255, 255, 255, 255),
@@ -31,7 +35,7 @@ class WelcomePage extends StatelessWidget {
 
               ElevatedButton(
                 onPressed: () {
-                  Navigator.pushNamed(context, '/sign_up');
+              context.push(AppPaths.signUp);
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryGreen,

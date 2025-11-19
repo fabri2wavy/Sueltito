@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:go_router/go_router.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
@@ -283,11 +285,13 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
                             _simulateSuccess = !_simulateSuccess;
                           });
 
-                          Navigator.of(dialogContext).pop();
+                          // 3. Cerrar el diálogo
+                          dialogContext.pop();
 
-                          Navigator.of(context).pushNamed(
-                            '/payment_status',
-                            arguments: resultStatus,
+                          // 4. Navegar con GoRouter
+                          context.go(
+                            AppPaths.paymentStatus,
+                            extra: resultStatus,
                           );
 
                           if (resultStatus == PaymentStatus.success) {

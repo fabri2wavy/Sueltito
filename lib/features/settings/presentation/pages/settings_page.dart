@@ -1,11 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
+import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sueltito/core/constants/roles.dart';
+import 'package:sueltito/core/navigation/presentation/providers/navigation_provider.dart';
+import 'package:sueltito/core/services/notification_service.dart';
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final currentUser = authState.value?.usuario;
+    final currentProfile = currentUser?.perfilActual;
+    final targetProfile = (currentProfile == null)
+        ? Roles.chofer
+        : Roles.oppositeOf(currentProfile);
+
+    ref.listen<AsyncValue<AuthResponse?>>(authProvider, (previous, next) {
+      next.whenData((response) {
+        if (response == null) {
+          context.go(AppPaths.welcome);
+        }
+      });
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -19,7 +42,6 @@ class SettingsPage extends StatelessWidget {
         elevation: 0,
         actions: [
           IconButton(
-            // Icono de QR
             icon: Icon(Icons.qr_code, color: AppColors.primaryGreen),
             onPressed: () {},
           ),
@@ -71,6 +93,28 @@ class SettingsPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 30),
+              // Cambiar de perfil (dinámico según el actual)
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: ListTile(
+                  leading: Icon(
+                    Icons.swap_horiz_rounded,
+                    color: AppColors.primaryGreen,
+                  ),
+                  title: Text(
+                    'Cambiar a ${targetProfile == Roles.chofer ? 'Conductor' : 'Pasajero'}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () =>
+                      _showSwitchRoleDialog(context, ref, targetProfile),
+                ),
+              ),
+              const SizedBox(height: 30),
+              // Botón Cerrar Sesión
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -78,11 +122,17 @@ class SettingsPage extends StatelessWidget {
                 ),
                 child: _buildSettingsRow(
                   context,
-                  title: 'Cambiar a Conductor',
-                  onTap: () => _showSwitchRoleDialog(context),
-                  icon: Icons.swap_horiz_rounded,
+                  title: 'Cerrar Sesión',
+                  onTap: authState.isLoading
+                      ? () {} // Deshabilitar si está cargando
+                      : () => _showLogoutDialog(context, ref),
+                  icon: Icons.logout,
+                  iconColor: Colors.red,
+                  titleColor: Colors.red,
+                  hideArrow: true,
                 ),
               ),
+              const SizedBox(height: 30),
             ],
           ),
         ),
@@ -90,37 +140,148 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  void _showSwitchRoleDialog(BuildContext context) {
+  void _showLogoutDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('Confirmación'),
-          content: const Text(
-            '¿Seguro que quieres cambiar al perfil de Conductor?',
-          ),
+          title: const Text('Cerrar Sesión'),
+          content: const Text('¿Estás seguro que deseas cerrar sesión?'),
           actions: [
             TextButton(
               child: const Text('Cancelar'),
               onPressed: () {
-                Navigator.of(dialogContext).pop();
+                context.pop();
               },
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryGreen,
-                foregroundColor: AppColors.textWhite,
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
               ),
-              child: const Text('Confirmar'),
+              child: const Text('Cerrar Sesión'),
               onPressed: () {
-                Navigator.of(dialogContext).pop();
-                // Si éxito:
-                //   Navigator.pushAndRemoveUntil(context, '/driver_home', (route) => false);
-                // Si error:
-                //   ScaffoldMessenger.of(context).showSnackBar(...)
+                context.pop();
+                ref.read(authProvider.notifier).logout();
               },
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _showSwitchRoleDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String targetProfile,
+  ) {
+    final authState = ref.watch(authProvider);
+    final currentUser = authState.value?.usuario;
+
+    if (currentUser == null) {
+      ref
+          .read(notificationServiceProvider)
+          .showError('Error: Usuario no encontrado');
+      return;
+    }
+
+    final humanTarget = targetProfile == Roles.chofer
+        ? 'Conductor'
+        : 'Pasajero';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return Consumer(
+          builder: (context2, dialogRef, _) {
+            final isLoading = dialogRef.watch(authProvider).isLoading;
+
+            return AlertDialog(
+              title: const Text('Confirmación'),
+              content: isLoading
+                  ? Row(
+                      children: const [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(child: Text('Cambiando perfil...')),
+                      ],
+                    )
+                  : Text(
+                      '¿Seguro que quieres cambiar al perfil de $humanTarget?',
+                    ),
+              actions: [
+                TextButton(
+                  child: const Text('Cancelar'),
+                  onPressed: isLoading ? null : () => dialogContext.pop(),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    foregroundColor: AppColors.textWhite,
+                  ),
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          final notificationService = dialogRef.read(
+                            notificationServiceProvider,
+                          );
+
+                          try {
+                            await dialogRef
+                                .read(authProvider.notifier)
+                                .changeProfile(currentUser.id, targetProfile);
+
+                            dialogContext.pop();
+
+                            if (context.mounted) {
+                              dialogRef
+                                      .read(navigationIndexProvider.notifier)
+                                      .state =
+                                  1;
+
+                              final updatedAuth = dialogRef
+                                  .read(authProvider)
+                                  .value;
+                              if (updatedAuth != null) {
+                                final defaultRoute = updatedAuth.usuario
+                                    .getDefaultRoute();
+                                context.go(defaultRoute);
+
+                                notificationService.showSuccess(
+                                  'Perfil cambiado a $humanTarget',
+                                  duration: const Duration(seconds: 2),
+                                );
+                              }
+                            }
+                          } catch (e) {
+                            notificationService.showError(
+                              'Error al cambiar perfil: ${e.toString()}',
+                            );
+                            dialogContext.pop();
+                          }
+                        },
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Text('Confirmar'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -133,12 +294,17 @@ class SettingsPage extends StatelessWidget {
     required VoidCallback onTap,
     bool hideArrow = false,
     IconData? icon,
+    Color? iconColor,
+    Color? titleColor,
   }) {
     return ListTile(
       leading: (icon != null)
-          ? Icon(icon, color: AppColors.primaryGreen)
+          ? Icon(icon, color: iconColor ?? AppColors.primaryGreen)
           : null,
-      title: Text(title, style: TextStyle(fontWeight: FontWeight.w600)),
+      title: Text(
+        title,
+        style: TextStyle(fontWeight: FontWeight.w600, color: titleColor),
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

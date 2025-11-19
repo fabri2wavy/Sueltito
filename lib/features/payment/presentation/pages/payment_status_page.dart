@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 
 class PaymentStatusPage extends StatefulWidget {
@@ -16,12 +18,11 @@ class _PaymentStatusPageState extends State<PaymentStatusPage> {
   @override
   void initState() {
     super.initState();
+    // Temporizador de 3 segundos para redirigir
     Timer(const Duration(seconds: 3), () {
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/passenger_home',
-          (Route<dynamic> route) => false,
-        );
+        // Navega al home del pasajero
+        context.go(AppPaths.passengerHome);
       }
     });
   }
@@ -38,7 +39,7 @@ class _PaymentStatusPageState extends State<PaymentStatusPage> {
         ? 'assets/images/page_correct.png'
         : 'assets/images/page_failed.png';
 
-    return Scaffold(
+  return Scaffold(
       backgroundColor: AppColors.backgroundGreen,
       body: Center(
         child: Column(
