@@ -12,6 +12,8 @@ import 'package:sueltito/features/main_navigation/presentation/pages/main_naviga
 import 'package:sueltito/features/driver/presentation/pages/driver_home_page.dart';
 import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 import 'package:sueltito/features/payment/presentation/pages/minibus_payment_page.dart';
+import 'package:sueltito/features/payment/presentation/pages/trufis_payment_page.dart';
+import 'package:sueltito/features/payment/presentation/pages/taxi_payment_page.dart';
 import 'package:sueltito/features/payment/presentation/pages/payment_status_page.dart';
 
 class RoutePermissions {
@@ -49,6 +51,16 @@ class RoutePermissions {
     RouteConfig(
       path: AppPaths.minibusPayment,
       builder: (context, state) => const MinibusPaymentPage(),
+      permission: const Permission(requiredPerfiles: [Roles.pasajero]),
+    ),
+    RouteConfig(
+      path: AppPaths.trufisPayment,
+      builder: (context, state) => const TrufiPaymentPage(),
+      permission: const Permission(requiredPerfiles: [Roles.pasajero]),
+    ),
+    RouteConfig(
+      path: AppPaths.taxiPayment,
+      builder: (context, state) => const TaxiPaymentPage(),
       permission: const Permission(requiredPerfiles: [Roles.pasajero]),
     ),
 

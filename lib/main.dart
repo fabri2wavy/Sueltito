@@ -32,6 +32,7 @@ class MainApp extends ConsumerWidget {
       title: 'Sueltito',
       scaffoldMessengerKey: kScaffoldMessengerKey,
       theme: getAppTheme(),
+      
       routerConfig: router,
       locale: const Locale('es', 'BO'),
       supportedLocales: const [

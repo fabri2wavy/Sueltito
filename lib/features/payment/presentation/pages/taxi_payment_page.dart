@@ -1,52 +1,56 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
-import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
 
-class MinibusPaymentPage extends StatefulWidget {
-  const MinibusPaymentPage({super.key});
+class TaxiPaymentPage extends StatefulWidget {
+  const TaxiPaymentPage({super.key});
 
   @override
-  State<MinibusPaymentPage> createState() => _MinibusPaymentPageState();
+  State<TaxiPaymentPage> createState() => _TaxiPaymentPageState();
 }
 
-class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
-  bool _isPreferencial = false;
+class _TaxiPaymentPageState extends State<TaxiPaymentPage> {
   final List<Pasaje> _pasajesSeleccionados = [];
-
-  // --- NUEVA VARIABLE DE ESTADO ---
-  // true = próximo pago será exitoso, false = próximo pago será rechazado
   bool _simulateSuccess = true;
+  final TextEditingController _montoController = TextEditingController();
+  String? _montoError;
 
-  // --- PRECIOS ---
-  static const double _precioCorto = 2.40;
-  static const double _precioCortoPref = 2.00;
-  static const double _precioLargo = 3.00;
-  static const double _precioLargoPref = 2.50;
+  @override
+  void initState() {
+    super.initState();
+    _montoController.addListener(_actualizarMonto);
+  }
 
-  double get precioActualCorto =>
-      _isPreferencial ? _precioCortoPref : _precioCorto;
-  double get precioActualLargo =>
-      _isPreferencial ? _precioLargoPref : _precioLargo;
+  @override
+  void dispose() {
+    _montoController.removeListener(_actualizarMonto);
+    _montoController.dispose();
+    super.dispose();
+  }
+
+  // --- LÓGICA ---
+  void _actualizarMonto() {
+    double? monto = double.tryParse(_montoController.text);
+    setState(() {
+      _pasajesSeleccionados.clear(); // Limpiamos la lista
+      if (monto != null && monto > 0) {
+        // Si el monto es válido, lo añadimos como el único pasaje
+        _pasajesSeleccionados.add(Pasaje(nombre: 'Pasaje Taxi', precio: monto));
+        _montoError = null;
+      } else if (_montoController.text.isNotEmpty) {
+        _montoError = "Monto inválido"; // Error si escriben "abc"
+      } else {
+        _montoError = null; // Sin error si está vacío
+      }
+    });
+  }
 
   double get totalAPagar =>
       _pasajesSeleccionados.fold(0.0, (sum, item) => sum + item.precio);
 
-  void _addPasaje(String nombre, double precio) {
-    setState(() {
-      _pasajesSeleccionados.add(Pasaje(nombre: nombre, precio: precio));
-    });
-  }
-
-  void _removePasaje(int index) {
-    setState(() {
-      _pasajesSeleccionados.removeAt(index);
-    });
-  }
-
+  // --- BUILD ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -62,18 +66,18 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                 children: [
                   _buildDriverInfoCard(),
                   const SizedBox(height: 24),
-                  _buildFareSelection(context),
+                  _buildFareSelection(context), // <--- La sección clave
                   const SizedBox(height: 24),
-                  _buildPayButton(context),
+                  _buildPayButton(context), // <--- Funciona sin cambios
                   const SizedBox(height: 24),
                 ],
               ),
             ),
           ),
-          _buildSummaryCard(context),
+          _buildSummaryCard(context), // <--- Funciona sin cambios
         ],
       ),
-  );
+    );
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
@@ -82,11 +86,11 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
       elevation: 0,
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: AppColors.primaryGreen),
-        onPressed: () => context.pop(),
+        onPressed: () => Navigator.of(context).pop(),
       ),
       centerTitle: true,
       title: Text(
-        'Bienvenido al Minibus\nFabricio',
+        'Bienvenido al Taxi\nFabricio',
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
           color: AppColors.primaryGreen,
@@ -119,108 +123,59 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
               ),
             ],
           ),
-          const Icon(
-            Icons.directions_bus,
-            size: 40,
-            color: AppColors.textBlack,
-          ),
+          const Icon(Icons.local_taxi, size: 40, color: AppColors.textBlack),
         ],
       ),
     );
   }
 
   Widget _buildFareSelection(BuildContext context) {
-    bool hasCorto = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Corto');
-    bool hasLargo = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Largo');
-
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Elige tu tramo:',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            Row(
-              children: [
-                Text(
-                  'Tarifa Preferencial?',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                Switch(
-                  value: _isPreferencial,
-                  onChanged: (value) {
-                    setState(() {
-                      _isPreferencial = value;
-                    });
-                  },
-                  activeColor: AppColors.primaryGreen,
-                ),
-              ],
-            ),
-          ],
+        Text(
+          'Ingrese el monto a Pagar',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(color: Colors.grey[800]),
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildFareButton(
-                context,
-                'Corto',
-                precioActualCorto,
-                () => _addPasaje('Tramo Corto', precioActualCorto),
-                isSelected: hasCorto,
-              ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _montoController,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: AppColors.textBlack,
+          ),
+          decoration: InputDecoration(
+            hintText: '0.00',
+            hintStyle: TextStyle(color: Colors.grey[400]),
+            prefixText: 'Bs ',
+            prefixStyle: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[600],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildFareButton(
-                context,
-                'Largo',
-                precioActualLargo,
-                () => _addPasaje('Tramo Largo', precioActualLargo),
-                isSelected: hasLargo,
-              ),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              borderSide: BorderSide.none,
             ),
-          ],
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              borderSide: BorderSide(color: AppColors.primaryGreen, width: 2),
+            ),
+            errorText: _montoError,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildFareButton(
-    BuildContext context,
-    String label,
-    double price,
-    VoidCallback onPressed, {
-    required bool isSelected,
-  }) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isSelected ? AppColors.primaryGreen : Colors.grey[300],
-        foregroundColor: isSelected ? Colors.white : Colors.black87,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          Text(
-            'Bs. ${price.toStringAsFixed(2)}',
-            style: const TextStyle(fontSize: 16),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- FUNCIÓN _buildPayButton MODIFICADA ---
   Widget _buildPayButton(BuildContext context) {
     bool hasItems = _pasajesSeleccionados.isNotEmpty;
 
@@ -233,7 +188,6 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                     context: context,
                     barrierDismissible: false,
                     builder: (dialogContext) {
-                      // Usamos dialogContext
                       return PaymentConfirmationDialog(
                         pasajes: _pasajesSeleccionados,
                         total: totalAPagar,
@@ -253,29 +207,17 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
                             _simulateSuccess = !_simulateSuccess;
                           });
 
-                          // 3. Cerrar el diálogo
-                          dialogContext.pop();
+                          Navigator.of(dialogContext).pop();
 
-                          // 4. Navegar a la página de estado usando GoRouter
-                          context.go(
-                            AppPaths.paymentStatus,
-                            extra: resultStatus,
+                          Navigator.of(context).pushNamed(
+                            '/payment_status',
+                            arguments: resultStatus,
                           );
 
-                          // 5. Limpiar la lista si el pago fue exitoso
-                          // 3. Cerrar el diálogo
-                          dialogContext.pop();
-
-                          // 4. Navegar a la página de estado usando GoRouter
-                          context.go(
-                            AppPaths.paymentStatus,
-                            extra: resultStatus,
-                          );
-
-                          // 5. Limpiar la lista si el pago fue exitoso
                           if (resultStatus == PaymentStatus.success) {
                             setState(() {
                               _pasajesSeleccionados.clear();
+                              _montoController.clear();
                             });
                           }
                         },
@@ -327,12 +269,10 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
         '$cantidad persona${cantidad > 1 ? 's' : ''}',
         subtotal,
         () {
-          int indexToRemove = _pasajesSeleccionados.indexWhere(
-            (p) => p.nombre == nombre,
-          );
-          if (indexToRemove != -1) {
-            _removePasaje(indexToRemove);
-          }
+          setState(() {
+            _pasajesSeleccionados.clear();
+            _montoController.clear();
+          });
         },
       );
     }).toList();
@@ -366,8 +306,9 @@ class _MinibusPaymentPageState extends State<MinibusPaymentPage> {
           const SizedBox(height: 16),
           if (_pasajesSeleccionados.isEmpty)
             const Text(
-              'Añade un tramo para comenzar...',
+              'Ingrese un monto para comenzar...',
               textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
             ),
           ...itemsWidget,
           const Divider(height: 32, thickness: 1),

@@ -13,6 +13,8 @@ class AppPaths {
   // ===== PASSENGER ROUTES =====
   static const passengerHome = '/passenger_home';
   static const minibusPayment = '/minibus_payment';
+  static const trufisPayment = '/trufis_payment';
+  static const taxiPayment = '/taxi_payment';
   static const paymentStatus = '/payment_status';
   
   // ===== DRIVER ROUTES =====

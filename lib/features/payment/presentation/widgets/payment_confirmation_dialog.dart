@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sueltito/core/config/app_theme.dart';
 import 'package:go_router/go_router.dart';
-import 'package:sueltito/features/payment/presentation/pages/minibus_payment_page.dart';
+import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
 
 class PaymentConfirmationDialog extends StatelessWidget {
   final List<Pasaje> pasajes;
@@ -40,7 +40,6 @@ class PaymentConfirmationDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-
             // 2. Input del Código
             TextField(
               decoration: InputDecoration(
@@ -60,7 +59,7 @@ class PaymentConfirmationDialog extends StatelessWidget {
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 20),
-
+            // 3. Lista de Items (Resumen)
             // 3. Lista de Items (Resumen)
             ...pasajeCounts.entries.map((entry) {
               String nombre = entry.key;
@@ -119,7 +118,6 @@ class PaymentConfirmationDialog extends StatelessWidget {
                 ),
               );
             }).toList(),
-
             const SizedBox(height: 20),
 
             // 4. Botones de Acción

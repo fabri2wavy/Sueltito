@@ -39,7 +39,7 @@ class _PaymentStatusPageState extends State<PaymentStatusPage> {
         ? 'assets/images/page_correct.png'
         : 'assets/images/page_failed.png';
 
-    return Scaffold(
+  return Scaffold(
       backgroundColor: AppColors.backgroundGreen,
       body: Center(
         child: Column(
