@@ -29,6 +29,10 @@ class SettingsPage extends ConsumerWidget {
       });
     });
 
+    final hasBothProfiles =
+        (currentUser?.esPasajero ?? false) &&
+        (currentUser?.esConductor ?? false);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -93,6 +97,31 @@ class SettingsPage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 30),
+              // Agregar perfil (solo cuando no tiene conductor)
+              const SizedBox(height: 10),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: ListTile(
+                  leading: Icon(
+                    Icons.person_add_alt_1,
+                    color: AppColors.primaryGreen,
+                  ),
+                  title: const Text(
+                    'Agregar perfil',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: (currentUser == null || hasBothProfiles)
+                      ? null
+                      : () => _showAddProfileDialog(context, ref, currentUser),
+                  enabled: !(currentUser == null || hasBothProfiles),
+                ),
+              ),
+              const SizedBox(height: 30),
+
               // Cambiar de perfil (dinámico según el actual)
               Container(
                 decoration: BoxDecoration(
@@ -109,8 +138,11 @@ class SettingsPage extends ConsumerWidget {
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () =>
-                      _showSwitchRoleDialog(context, ref, targetProfile),
+                  onTap: (targetProfile == Roles.chofer && !hasBothProfiles)
+                      ? null
+                      : () =>
+                            _showSwitchRoleDialog(context, ref, targetProfile),
+                  enabled: !(targetProfile == Roles.chofer && !hasBothProfiles),
                 ),
               ),
               const SizedBox(height: 30),
@@ -233,9 +265,9 @@ class SettingsPage extends ConsumerWidget {
                           );
 
                           try {
-                            await dialogRef
-                                .read(authProvider.notifier)
-                                .changeProfile(currentUser.id, targetProfile);
+              await dialogRef
+                .read(authProvider.notifier)
+                .switchProfileLocally(currentUser.id, targetProfile);
 
                             dialogContext.pop();
 
@@ -262,6 +294,106 @@ class SettingsPage extends ConsumerWidget {
                           } catch (e) {
                             notificationService.showError(
                               'Error al cambiar perfil: ${e.toString()}',
+                            );
+                            dialogContext.pop();
+                          }
+                        },
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Text('Confirmar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showAddProfileDialog(
+    BuildContext context,
+    WidgetRef ref,
+    dynamic currentUser,
+  ) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return Consumer(
+          builder: (context2, dialogRef, _) {
+            final isLoading = dialogRef.watch(authProvider).isLoading;
+
+            return AlertDialog(
+              title: const Text('Agregar perfil'),
+              content: isLoading
+                  ? Row(
+                      children: const [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(child: Text('Agregando perfil...')),
+                      ],
+                    )
+                  : const Text('¿Deseas agregar el perfil de Conductor?'),
+              actions: [
+                TextButton(
+                  child: const Text('Cancelar'),
+                  onPressed: isLoading ? null : () => dialogContext.pop(),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    foregroundColor: AppColors.textWhite,
+                  ),
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          final notificationService = dialogRef.read(
+                            notificationServiceProvider,
+                          );
+
+                          try {
+                            final cuenta = currentUser.nroCuenta;
+                            final tipoCuenta =
+                                'BUSINESS CODE'; // TODO: use real type
+                            await dialogRef
+                                .read(authProvider.notifier)
+                                .addProfile(currentUser.id, cuenta, tipoCuenta);
+
+                            dialogContext.pop();
+
+                            if (context.mounted) {
+                              // Reset navigation index to home and navigate to user's default route
+                              dialogRef
+                                  .read(navigationIndexProvider.notifier)
+                                  .state = 1;
+
+                              final updatedAuth = dialogRef.read(authProvider).value;
+                              if (updatedAuth != null) {
+                                final defaultRoute = updatedAuth.usuario.getDefaultRoute();
+                                context.go(defaultRoute);
+                              }
+
+                              notificationService.showSuccess(
+                                'Perfil agregado correctamente',
+                                duration: const Duration(seconds: 2),
+                              );
+                            }
+                          } catch (e) {
+                            notificationService.showError(
+                              'Error al agregar perfil: ${e.toString()}',
                             );
                             dialogContext.pop();
                           }
