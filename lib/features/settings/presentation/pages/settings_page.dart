@@ -265,9 +265,9 @@ class SettingsPage extends ConsumerWidget {
                           );
 
                           try {
-                            await dialogRef
-                                .read(authProvider.notifier)
-                                .changeProfile(currentUser.id, targetProfile);
+              await dialogRef
+                .read(authProvider.notifier)
+                .switchProfileLocally(currentUser.id, targetProfile);
 
                             dialogContext.pop();
 
@@ -375,6 +375,17 @@ class SettingsPage extends ConsumerWidget {
                             dialogContext.pop();
 
                             if (context.mounted) {
+                              // Reset navigation index to home and navigate to user's default route
+                              dialogRef
+                                  .read(navigationIndexProvider.notifier)
+                                  .state = 1;
+
+                              final updatedAuth = dialogRef.read(authProvider).value;
+                              if (updatedAuth != null) {
+                                final defaultRoute = updatedAuth.usuario.getDefaultRoute();
+                                context.go(defaultRoute);
+                              }
+
                               notificationService.showSuccess(
                                 'Perfil agregado correctamente',
                                 duration: const Duration(seconds: 2),

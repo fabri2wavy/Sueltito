@@ -12,4 +12,5 @@ abstract class AuthRepository {
   Future<ProfileChangeResponse> changeProfile(String userId, String newProfile);
   Future<AddProfileResponse> addProfile(String userId, String cuenta, String tipoCuenta);
   Future<User?> getCurrentUser();
+  Future<void> saveUser(User user);
 }

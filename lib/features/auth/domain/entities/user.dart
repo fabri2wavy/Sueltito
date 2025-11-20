@@ -36,6 +36,10 @@ class User {
   String? get perfilActual => perfiles.isNotEmpty ? perfiles.first : null;
 
   String getDefaultRoute() {
+    final active = perfilActual;
+    if (active == Roles.chofer) return AppPaths.driverHome;
+    if (active == Roles.pasajero) return AppPaths.passengerHome;
+    // fallback: if active not defined, fallback to presence check
     if (perfiles.contains(Roles.chofer)) return AppPaths.driverHome;
     if (perfiles.contains(Roles.pasajero)) return AppPaths.passengerHome;
 

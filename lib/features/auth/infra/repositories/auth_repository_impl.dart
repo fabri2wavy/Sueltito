@@ -45,6 +45,12 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<void> saveUser(User user) async {
+    final model = UserModel.fromEntity(user);
+    await localDataSource.saveUser(model);
+  }
+
+  @override
   Future<bool> isAuthenticated() async {
     return await localDataSource.isAuthenticated();
   }
