@@ -18,6 +18,8 @@ class RegisterFormState {
   final DateTime? fechaNacimiento;
   final String celular;
   final String correo;
+  final String nroCuentaBanco;
+  final String tipoCuentaBanco;
   final List<String> pin;
 
   RegisterFormState({
@@ -30,6 +32,8 @@ class RegisterFormState {
     this.fechaNacimiento,
     this.celular = '',
     this.correo = '',
+    this.nroCuentaBanco = '',
+    this.tipoCuentaBanco = '',
     this.pin = const ['', '', '', ''],
   });
 
@@ -43,6 +47,8 @@ class RegisterFormState {
     DateTime? fechaNacimiento,
     String? celular,
     String? correo,
+    String? nroCuentaBanco,
+    String? tipoCuentaBanco,
     List<String>? pin,
   }) {
     return RegisterFormState(
@@ -55,6 +61,8 @@ class RegisterFormState {
       fechaNacimiento: fechaNacimiento ?? this.fechaNacimiento,
       celular: celular ?? this.celular,
       correo: correo ?? this.correo,
+      nroCuentaBanco: nroCuentaBanco ?? this.nroCuentaBanco,
+      tipoCuentaBanco: tipoCuentaBanco ?? this.tipoCuentaBanco,
       pin: pin ?? this.pin,
     );
   }
@@ -114,6 +122,14 @@ class RegisterFormNotifier extends Notifier<RegisterFormState> {
     state = state.copyWith(correo: value);
   }
 
+  void updateNroCuentaBanco(String value) {
+    state = state.copyWith(nroCuentaBanco: value);
+  }
+
+  void updateTipoCuentaBanco(String value) {
+    state = state.copyWith(tipoCuentaBanco: value);
+  }
+
   void updatePin(int index, String value) {
     final newPin = List<String>.from(state.pin);
     newPin[index] = value;
@@ -127,7 +143,7 @@ class RegisterFormNotifier extends Notifier<RegisterFormState> {
   // ✅ Obtener información del dispositivo
   Future<Map<String, dynamic>> _getDeviceInfo(BuildContext context) async {
     final deviceInfo = DeviceInfoPlugin();
-    
+
     String sistemaOperativo = '';
     String version = '';
     String marca = '';
@@ -161,7 +177,7 @@ class RegisterFormNotifier extends Notifier<RegisterFormState> {
         marca = info.brand ?? '';
         modelo = info.model ?? '';
         identificador = 'android_${info.version.sdkInt}';
-        
+
         try {
           // androidId como alternativa a IMEI
           final aid = info.id;
@@ -169,7 +185,7 @@ class RegisterFormNotifier extends Notifier<RegisterFormState> {
             imei = aid;
           }
         } catch (_) {}
-        
+
         bluetooth = 'BT-Android-${info.id}';
       } else if (Platform.isIOS) {
         sistemaOperativo = 'iOS';
@@ -178,7 +194,7 @@ class RegisterFormNotifier extends Notifier<RegisterFormState> {
         marca = 'Apple';
         modelo = info.utsname.machine;
         identificador = 'ios_${info.systemVersion}';
-        
+
         try {
           // identifierForVendor como alternativa a IMEI
           final idfv = info.identifierForVendor;
@@ -186,7 +202,7 @@ class RegisterFormNotifier extends Notifier<RegisterFormState> {
             imei = idfv;
           }
         } catch (_) {}
-        
+
         bluetooth = 'BT-iOS-${info.identifierForVendor ?? "unknown"}';
       }
     } catch (e) {
@@ -214,7 +230,8 @@ class RegisterFormNotifier extends Notifier<RegisterFormState> {
     // Dimensiones de pantalla
     try {
       final mq = MediaQuery.of(context);
-      dimension = "${mq.size.width.toStringAsFixed(0)}x${mq.size.height.toStringAsFixed(0)} px";
+      dimension =
+          "${mq.size.width.toStringAsFixed(0)}x${mq.size.height.toStringAsFixed(0)} px";
     } catch (_) {
       dimension = '';
     }
@@ -252,7 +269,14 @@ class RegisterFormNotifier extends Notifier<RegisterFormState> {
       fechaNacimiento: state.fechaNacimiento.toString(),
       celular: state.celular,
       correo: state.correo,
-      nroCuenta: state.celular,
+      //TODO: use real nroCuenta and tipoCuenta
+      nroCuenta: '0382',
+      nroCuentaBanco: state.nroCuentaBanco.isNotEmpty
+          ? state.nroCuentaBanco
+          : state.celular,
+      tipoCuentaBanco: state.tipoCuentaBanco.isNotEmpty
+          ? state.tipoCuentaBanco
+          : 'YAPE',
       pin: state.pin.join(),
       numeroBluetooth: deviceData['bluetooth'] ?? '',
       numeroImei: deviceData['imei'] ?? '',
@@ -272,6 +296,7 @@ class RegisterFormNotifier extends Notifier<RegisterFormState> {
 }
 
 // ✅ NotifierProvider (Riverpod 2.0+)
-final registerFormProvider = NotifierProvider<RegisterFormNotifier, RegisterFormState>(
-  RegisterFormNotifier.new,
-);
+final registerFormProvider =
+    NotifierProvider<RegisterFormNotifier, RegisterFormState>(
+      RegisterFormNotifier.new,
+    );
