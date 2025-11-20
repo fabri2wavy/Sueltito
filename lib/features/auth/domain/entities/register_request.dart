@@ -9,6 +9,8 @@ class RegisterRequest {
   final String fechaNacimiento;
   final String celular;
   final String nroCuenta;
+  final String nroCuentaBanco;
+  final String tipoCuentaBanco;
   final String correo;
   final String pin;
   final String numeroBluetooth;
@@ -35,6 +37,8 @@ class RegisterRequest {
     required this.fechaNacimiento,
     required this.celular,
     required this.nroCuenta,
+    required this.nroCuentaBanco,
+    required this.tipoCuentaBanco,
     required this.correo,
     required this.pin,
     required this.numeroBluetooth,
