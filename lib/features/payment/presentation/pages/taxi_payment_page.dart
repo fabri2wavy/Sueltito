@@ -6,21 +6,31 @@ import 'package:sueltito/core/config/app_theme.dart';
 import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sueltito/core/constants/pasaje_constants.dart';
+import 'package:sueltito/features/payment/infra/datasources/payment_remote_ds.dart';
+import 'package:sueltito/features/payment/infra/repositories/payment_repository_impl.dart';
+import 'package:sueltito/features/payment/domain/usecases/prepare_pasaje_usecase.dart';
+import 'package:sueltito/features/payment/domain/usecases/register_pasaje_usecase.dart';
+import 'package:sueltito/features/payment/domain/entities/pasaje_prepare_request.dart';
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sueltito/core/network/api_client.dart';
 
-class TaxiPaymentPage extends StatefulWidget {
+class TaxiPaymentPage extends ConsumerStatefulWidget {
   const TaxiPaymentPage({super.key});
 
   @override
-  State<TaxiPaymentPage> createState() => _TaxiPaymentPageState();
+  ConsumerState<TaxiPaymentPage> createState() => _TaxiPaymentPageState();
 }
 
-class _TaxiPaymentPageState extends State<TaxiPaymentPage> {
+class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
   // --- NUEVO: Variable para los datos del NFC ---
   Map<String, dynamic>? _conductorData;
   // --- FIN NUEVO ---
 
   final List<Pasaje> _pasajesSeleccionados = [];
   bool _simulateSuccess = true;
+  bool _isLoading = false;
   final TextEditingController _montoController = TextEditingController();
   String? _montoError;
 
@@ -62,7 +72,8 @@ class _TaxiPaymentPageState extends State<TaxiPaymentPage> {
       _pasajesSeleccionados.clear(); // Limpiamos la lista
       if (monto != null && monto > 0) {
         // Si el monto es válido, lo añadimos como el único pasaje
-        _pasajesSeleccionados.add(Pasaje(nombre: 'Pasaje Taxi', precio: monto));
+        final taxiInfo = PasajeConstants.taxiOption();
+        _pasajesSeleccionados.add(Pasaje(nombre: 'Pasaje Taxi', precio: monto, codigo: taxiInfo.codigo));
         _montoError = null;
       } else if (_montoController.text.isNotEmpty) {
         _montoError = "Monto inválido"; // Error si escriben "abc"
@@ -231,8 +242,8 @@ class _TaxiPaymentPageState extends State<TaxiPaymentPage> {
     return Column(
       children: [
         ElevatedButton(
-          onPressed: hasItems
-              ? () {
+      onPressed: hasItems && !_isLoading
+        ? () {
                   showDialog(
                     context: context,
                     barrierDismissible: false,
@@ -241,26 +252,47 @@ class _TaxiPaymentPageState extends State<TaxiPaymentPage> {
                         pasajes: _pasajesSeleccionados,
                         total: totalAPagar,
                         onConfirm: () async {
+                          setState(() { _isLoading = true; });
                           
                           // --- NUEVO: Preparar Payload para Backend ---
-                          final List<Map<String, dynamic>> pasajesJSON =
-                              _pasajesSeleccionados.map((p) => {
-                                    'nombre': p.nombre,
-                                    'precio': p.precio,
-                                  }).toList();
+                          // Build domain request and call use case below; no raw payload needed
+                          try {
+                            final apiClient = ApiClient();
+                            final remoteDS = PaymentRemoteDataSourceImpl(apiClient: apiClient);
+                            final repository = PaymentRepositoryImpl(remoteDataSource: remoteDS);
+                            final usecase = PreparePasajeUseCase(repository);
+                            final propietario = _conductorData!['propietario'] as Map<String, dynamic>? ?? {};
+                            final servicio = _conductorData!['servicio'] as Map<String, dynamic>? ?? {};
+                            final tag = _conductorData!['tag'] as Map<String, dynamic>? ?? {};
+                            final currentUser = ref.read(currentUserProvider);
+                            final pasajeroId = currentUser?.id ?? '';
+                            final pasajeroCuenta = currentUser?.nroCuenta ?? '';
+                            // detalle (raw) not required because domain PagoDetalleEntity will be created below
+                            final tramite = TramiteEntity(tramiteId: '', numeroAutorizacion: '', codigoOtp: '');
+                            final servicioEntity = ServicioEntity(tipo: servicio['tipo'] ?? servicio['tipo_transporte'] ?? '03', nombre: servicio['nombre'] ?? '', tipoIdentificador: servicio['tipo_identificador'] ?? '', identificador: servicio['identificador'] ?? '', codigoEntidad: servicio['entidad'] ?? servicio['codigo_entidad'] ?? '');
+                            final tagEntity = TagEntity(identificador: tag['tag_uid'] ?? tag['identificador'] ?? '');
+                            final usuarioEntity = UsuarioPagoEntity(pasajeroId: pasajeroId, conductorId: propietario['identificador'] ?? '', pasajeroCuenta: pasajeroCuenta, conductorCuenta: propietario['cuenta'] ?? '');
+                            final pagoEntity = PagoEntity(tipoTransporte: servicio['tipo_transporte'] ?? servicio['tipo'] ?? '03', formaPago: '01', montoTotal: totalAPagar, detalle: _pasajesSeleccionados.map((p) => PagoDetalleEntity(tipoPago: p.codigo ?? '')).toList());
+                            final requestDomain = PasajePrepareRequest(tramite: tramite, servicio: servicioEntity, tag: tagEntity, usuario: usuarioEntity, pago: pagoEntity, glosa: 'Pago Pasaje');
+                            final response = await usecase(requestDomain);
+                            print('Prepare response taxi: ${response.mensaje}');
+                            if (response.continuarFlujo) {
+                              final registerUsecase = RegisterPasajeUseCase(repository);
+                              final tramiteFilled = TramiteEntity(tramiteId: response.data?.idTramite ?? '', numeroAutorizacion: response.data?.numeroAutorizacion ?? '', codigoOtp: '');
+                              final requestConfirm = PasajePrepareRequest(tramite: tramiteFilled, servicio: servicioEntity, tag: tagEntity, usuario: usuarioEntity, pago: pagoEntity, glosa: 'Pago Pasaje');
+                              final confirmResp = await registerUsecase(requestConfirm);
+                              if (confirmResp.continuarFlujo) {
+                                final msg = confirmResp.data?.numeroAutorizacion ?? confirmResp.mensaje;
+                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirmado: $msg')));
+                              }
+                            }
+                          } catch (e) {
+                            print('Error preparando pasaje taxi: $e');
+                          } finally {
+                            if (mounted) setState(() { _isLoading = false; });
+                          }
 
-                          final Map<String, dynamic> payloadToSend = {
-                            'info_conductor': _conductorData,
-                            'detalle_pago': {
-                              'pasajes': pasajesJSON,
-                              'total_pagado': totalAPagar,
-                            },
-                            'pasajero_id': 'fabricio_id',
-                            'timestamp': DateTime.now().toIso8601String(),
-                          };
-                          
                           print("--- ENVIANDO PAGO TAXI ---");
-                          print(json.encode(payloadToSend));
                           // --- FIN NUEVO ---
 
                           await Future.delayed(
@@ -323,6 +355,7 @@ class _TaxiPaymentPageState extends State<TaxiPaymentPage> {
                           }
                           // --- FIN NUEVO ---
                         },
+                        isLoading: _isLoading,
                       );
                     },
                   );

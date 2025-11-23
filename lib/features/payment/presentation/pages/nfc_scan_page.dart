@@ -128,6 +128,7 @@ class _NfcScanPageState extends State<NfcScanPage>
       switch (tipoTransporte) {
         case '01': rutaDestino = AppPaths.minibusPayment; break;
         case '02': rutaDestino = AppPaths.trufisPayment; break;
+        case '04': rutaDestino = AppPaths.trufisPayment; break; // Trufi Zonal
         case '03': rutaDestino = AppPaths.taxiPayment; break;
         default:
           print('[NFC] Transporte desconocido');

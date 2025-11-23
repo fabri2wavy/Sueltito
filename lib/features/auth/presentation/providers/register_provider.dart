@@ -295,7 +295,6 @@ class RegisterFormNotifier extends Notifier<RegisterFormState> {
   }
 }
 
-// ✅ NotifierProvider (Riverpod 2.0+)
 final registerFormProvider =
     NotifierProvider<RegisterFormNotifier, RegisterFormState>(
       RegisterFormNotifier.new,

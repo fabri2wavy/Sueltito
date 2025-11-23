@@ -7,58 +7,54 @@ import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
+import 'package:sueltito/core/network/api_client.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sueltito/features/payment/infra/datasources/payment_remote_ds.dart';
+import 'package:sueltito/features/payment/infra/repositories/payment_repository_impl.dart';
+import 'package:sueltito/features/payment/domain/usecases/prepare_pasaje_usecase.dart';
+import 'package:sueltito/features/payment/domain/usecases/register_pasaje_usecase.dart';
+import 'package:sueltito/features/payment/domain/entities/pasaje_prepare_request.dart';
+import 'package:sueltito/core/constants/pasaje_constants.dart';
 
-// --- MODIFICADO: Nombre de clase unificado (del merge) ---
-class TrufiPaymentPage extends StatefulWidget {
+class TrufiPaymentPage extends ConsumerStatefulWidget {
   const TrufiPaymentPage({super.key});
 
   @override
-  State<TrufiPaymentPage> createState() => _TrufiPaymentPageState();
+  ConsumerState<TrufiPaymentPage> createState() => _TrufiPaymentPageState();
 }
 
-class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
-  // --- NUEVO: Variable para guardar los datos del NFC ---
+class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
   Map<String, dynamic>? _conductorData;
-  // --- FIN NUEVO ---
+  String? _conductorTipoTransporte;
 
   bool _isPreferencial = false;
+  bool _isLoading = false;
   final List<Pasaje> _pasajesSeleccionados = [];
   bool _simulateSuccess = true;
 
-  // --- MODIFICADO: Precios de Trufi (tomados de tu merge) ---
-  static const double _precioZonal = 2.50;
-  static const double _precioZonalPref = 2.00;
-  static const double _precioLargo = 3.00;
-  static const double _precioLargoPref = 2.50;
-  static const double _precioCorto = 2.80; // (Este es el precio "Corto" del Trufi)
-  static const double _precioCortoPref = 2.30;
-  static const double _precioExtraLargo = 3.30;
-  static const double _precioExtraLargoPref = 2.80;
-
-  double get precioActualZonal =>
-      _isPreferencial ? _precioZonalPref : _precioZonal;
-  double get precioActualLargo =>
-      _isPreferencial ? _precioLargoPref : _precioLargo;
-  double get precioActualCorto =>
-      _isPreferencial ? _precioCortoPref : _precioCorto;
-  double get precioActualExtraLargo =>
-      _isPreferencial ? _precioExtraLargoPref : _precioExtraLargo;
-  // --- FIN MODIFICADO ---
+  List<PasajeInfo> get _trufiOptions =>
+      PasajeConstants.trufiOptions(preferencial: _isPreferencial);
+  PasajeInfo get precioZonal => _trufiOptions[0];
+  PasajeInfo get precioCorto => _trufiOptions[1];
+  PasajeInfo get precioLargo => _trufiOptions[2];
+  PasajeInfo get precioExtraLargo => _trufiOptions[3];
 
   double get totalAPagar =>
       _pasajesSeleccionados.fold(0.0, (sum, item) => sum + item.precio);
 
-  // --- NUEVO: Lógica para recibir los datos del NFC ---
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    
+
     if (_conductorData == null) {
       final state = GoRouterState.of(context);
       final extra = state.extra;
       if (extra != null && extra is Map<String, dynamic>) {
         setState(() {
           _conductorData = extra;
+          _conductorTipoTransporte = extra['servicio']?['tipo_transporte']
+              ?.toString();
         });
       } else {
         print("Error: TrufiPaymentPage se abrió sin datos del conductor.");
@@ -67,9 +63,11 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
   }
   // --- FIN NUEVO ---
 
-  void _addPasaje(String nombre, double precio) {
+  void _addPasaje(String nombre, double precio, String codigo) {
     setState(() {
-      _pasajesSeleccionados.add(Pasaje(nombre: nombre, precio: precio));
+      _pasajesSeleccionados.add(
+        Pasaje(nombre: nombre, precio: precio, codigo: codigo),
+      );
     });
   }
 
@@ -83,11 +81,7 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
   Widget build(BuildContext context) {
     // --- NUEVO: Muestra 'cargando' hasta que los datos del NFC lleguen ---
     if (_conductorData == null) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     // --- FIN NUEVO ---
 
@@ -133,9 +127,9 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
         'Bienvenido al Trufi\nFabricio', // Título actualizado (de tu merge)
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: AppColors.primaryGreen,
-              fontWeight: FontWeight.bold,
-            ),
+          color: AppColors.primaryGreen,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -143,13 +137,16 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
   // --- MODIFICADO: Tarjeta de conductor dinámica (fusionada) ---
   Widget _buildDriverInfoCard(Map<String, dynamic> driverData) {
     // 1. Extraemos los bloques
-    final propietario = driverData['propietario'] as Map<String, dynamic>? ?? {};
+    final propietario =
+        driverData['propietario'] as Map<String, dynamic>? ?? {};
     final servicio = driverData['servicio'] as Map<String, dynamic>? ?? {};
 
     // 2. Extraemos los datos (usando el JSON que ya conocemos)
-    final String nombre = propietario['nombre'] as String? ?? 'Conductor no encontrado';
+    final String nombre =
+        propietario['nombre'] as String? ?? 'Conductor no encontrado';
     final String placa = servicio['identificador'] as String? ?? 'S/N';
-    final String nombreRuta = servicio['nombre'] as String? ?? 'Ruta desconocida';
+    final String nombreRuta =
+        servicio['nombre'] as String? ?? 'Ruta desconocida';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -165,7 +162,10 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
             children: [
               Text(
                 'Placa: $placa', // Dato dinámico
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -180,7 +180,7 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
           ),
           // --- Icono de auto (de tu merge) ---
           const Icon(
-            Icons.directions_car, 
+            Icons.directions_car,
             size: 40,
             color: AppColors.textBlack,
           ),
@@ -198,6 +198,68 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
     bool hasExtraLargo = _pasajesSeleccionados.any(
       (p) => p.nombre == 'Tramo Extra Largo',
     );
+
+    // If this is a Trufi Zonal (tipo_transporte '04') show only Zonal option
+    if (_conductorTipoTransporte == '04') {
+      final zonalInfo = PasajeConstants.PAP_PASAJES['000019']!; // daytime
+      final zonalInfoN = PasajeConstants.PAP_PASAJES['000020']!; // night
+      final selectedPrice = _isPreferencial
+          ? zonalInfoN.tarifa
+          : zonalInfo.tarifa;
+      final bool hasZonalOnly = _pasajesSeleccionados.any(
+        (p) => p.codigo == zonalInfo.codigo || p.codigo == zonalInfoN.codigo,
+      );
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Elige tu tramo:',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              Row(
+                children: [
+                  Text(
+                    'Tarifa Preferencial?',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  Switch(
+                    value: _isPreferencial,
+                    onChanged: (value) {
+                      setState(() {
+                        _isPreferencial = value;
+                      });
+                    },
+                    activeThumbColor: AppColors.primaryGreen,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildFareButton(
+                  context,
+                  'Zonal',
+                  selectedPrice,
+                  () => _addPasaje(
+                    'Tramo Zonal',
+                    selectedPrice,
+                    _isPreferencial ? zonalInfoN.codigo : zonalInfo.codigo,
+                  ),
+                  isSelected: hasZonalOnly,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,8 +297,12 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
               child: _buildFareButton(
                 context,
                 'Zonal',
-                precioActualZonal,
-                () => _addPasaje('Tramo Zonal', precioActualZonal),
+                precioZonal.tarifa,
+                () => _addPasaje(
+                  'Tramo Zonal',
+                  precioZonal.tarifa,
+                  precioZonal.codigo,
+                ),
                 isSelected: hasZonal,
               ),
             ),
@@ -245,8 +311,12 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
               child: _buildFareButton(
                 context,
                 'Largo',
-                precioActualLargo,
-                () => _addPasaje('Tramo Largo', precioActualLargo),
+                precioLargo.tarifa,
+                () => _addPasaje(
+                  'Tramo Largo',
+                  precioLargo.tarifa,
+                  precioLargo.codigo,
+                ),
                 isSelected: hasLargo,
               ),
             ),
@@ -259,8 +329,12 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
               child: _buildFareButton(
                 context,
                 'Corto',
-                precioActualCorto,
-                () => _addPasaje('Tramo Corto', precioActualCorto),
+                precioCorto.tarifa,
+                () => _addPasaje(
+                  'Tramo Corto',
+                  precioCorto.tarifa,
+                  precioCorto.codigo,
+                ),
                 isSelected: hasCorto,
               ),
             ),
@@ -269,8 +343,12 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
               child: _buildFareButton(
                 context,
                 'Extra Largo',
-                precioActualExtraLargo,
-                () => _addPasaje('Tramo Extra Largo', precioActualExtraLargo),
+                precioExtraLargo.tarifa,
+                () => _addPasaje(
+                  'Tramo Extra Largo',
+                  precioExtraLargo.tarifa,
+                  precioExtraLargo.codigo,
+                ),
                 isSelected: hasExtraLargo,
               ),
             ),
@@ -320,8 +398,8 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
     return Column(
       children: [
         ElevatedButton(
-          onPressed: hasItems
-              ? () {
+      onPressed: hasItems && !_isLoading
+        ? () {
                   showDialog(
                     context: context,
                     barrierDismissible: false,
@@ -329,43 +407,112 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
                       return PaymentConfirmationDialog(
                         pasajes: _pasajesSeleccionados,
                         total: totalAPagar,
-                        onConfirm: () async {
+            onConfirm: () async {
+              setState(() { _isLoading = true; });
                           // --- NUEVO: PREPARAMOS LOS DATOS ANTES DE PAGAR ---
-                          final List<Map<String, dynamic>> pasajesJSON =
-                              _pasajesSeleccionados
-                                  .map((p) => {
-                                        'nombre': p.nombre,
-                                        'precio': p.precio,
-                                      })
-                                  .toList();
+                          // Using domain detalle mapping instead of raw pasajesJSON
 
-                          final Map<String, dynamic> payloadToSend = {
-                            'info_conductor': _conductorData, // <-- ¡LOS DATOS DEL NFC!
-                            'detalle_pago': {
-                              'pasajes': pasajesJSON,
-                              'total_pagado': totalAPagar,
-                            },
-                            'pasajero_id': 'fabricio_id', // (Esto vendrá del login)
-                            'timestamp': DateTime.now().toIso8601String(),
-                          };
-                          
-                          print("--- ENVIANDO AL BACKEND (Simulación) ---");
-                          print(json.encode(payloadToSend));
-                          // await paymentUseCase.execute(payloadToSend);
+                          // We will build a domain request and use the use case below; no raw payload needed.
+
+                          try {
+                            final apiClient = ApiClient();
+                            final remoteDS = PaymentRemoteDataSourceImpl(
+                              apiClient: apiClient,
+                            );
+                            final repository = PaymentRepositoryImpl(
+                              remoteDataSource: remoteDS,
+                            );
+                            final usecase = PreparePasajeUseCase(repository);
+              final propietario = _conductorData!['propietario'] as Map<String, dynamic>? ?? {};
+                            final servicio =
+                                _conductorData!['servicio']
+                                    as Map<String, dynamic>? ??
+                                {};
+              final tag = _conductorData!['tag'] as Map<String, dynamic>? ?? {};
+                            // pasajero and cuenta read from auth
+                            // Note: use currentUserProvider or auth provider to read logged user
+                            final currentUser = ref.read(currentUserProvider);
+                            final pasajeroId = currentUser?.id ?? '';
+                            final pasajeroCuenta = currentUser?.nroCuenta ?? '';
+                            // detalle will be created as domain PagoDetalleEntities below for use case
+                            final tramite = TramiteEntity(
+                              tramiteId: '',
+                              numeroAutorizacion: '',
+                              codigoOtp: '',
+                            );
+                            final servicioEntity = ServicioEntity(
+                              tipo:
+                                  servicio['tipo'] ??
+                                  servicio['tipo_transporte'] ??
+                                  '02',
+                              nombre: servicio['nombre'] ?? '',
+                              tipoIdentificador:
+                                  servicio['tipo_identificador'] ?? '',
+                              identificador: servicio['identificador'] ?? '',
+                              codigoEntidad:
+                                  servicio['entidad'] ??
+                                  servicio['codigo_entidad'] ??
+                                  '',
+                            );
+                            final tagEntity = TagEntity(
+                              identificador:
+                                  tag['tag_uid'] ?? tag['identificador'] ?? '',
+                            );
+                            final usuarioEntity = UsuarioPagoEntity(
+                              pasajeroId: pasajeroId,
+                              conductorId: propietario['identificador'] ?? '',
+                              pasajeroCuenta: pasajeroCuenta,
+                              conductorCuenta: propietario['cuenta'] ?? '',
+                            );
+                            final pagoEntity = PagoEntity(
+                              tipoTransporte:
+                                  servicio['tipo_transporte'] ??
+                                  servicio['tipo'] ??
+                                  '02',
+                              formaPago: '01',
+                              montoTotal: totalAPagar,
+                              detalle: _pasajesSeleccionados
+                                  .map(
+                                    (p) => PagoDetalleEntity(
+                                      tipoPago: p.codigo ?? '',
+                                    ),
+                                  )
+                                  .toList(),
+                            );
+                            final requestDomain = PasajePrepareRequest(
+                              tramite: tramite,
+                              servicio: servicioEntity,
+                              tag: tagEntity,
+                              usuario: usuarioEntity,
+                              pago: pagoEntity,
+                              glosa: 'Pago Pasaje',
+                            );
+                            final response = await usecase(requestDomain);
+                            print(
+                              'Prepare response trufi: ${response.mensaje}',
+                            );
+                            if (response.continuarFlujo) {
+                              final registerUsecase = RegisterPasajeUseCase(repository);
+                              final tramiteFilled = TramiteEntity(tramiteId: response.data?.idTramite ?? '', numeroAutorizacion: response.data?.numeroAutorizacion ?? '', codigoOtp: '');
+                              final requestConfirm = PasajePrepareRequest(tramite: tramiteFilled, servicio: servicioEntity, tag: tagEntity, usuario: usuarioEntity, pago: pagoEntity, glosa: 'Pago Pasaje');
+                              final confirmResp = await registerUsecase(requestConfirm);
+                              if (confirmResp.continuarFlujo) {
+                                final msg = confirmResp.data?.numeroAutorizacion ?? confirmResp.mensaje;
+                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirmado: $msg')));
+                              }
+                            }
+                          } catch (e) {
+                            print('Error preparando pasaje trufi: $e');
+                          } finally {
+                            if (mounted) setState(() { _isLoading = false; });
+                          }
                           // --- FIN NUEVO ---
-
-
-                          // (Inicio de tu simulación de pago)
-                          await Future.delayed(
-                            const Duration(milliseconds: 500),
-                          );
-
                           final PaymentStatus resultStatus;
                           if (_simulateSuccess) {
-                            resultStatus = PaymentStatus.success;
-                          } else {
-                            resultStatus = PaymentStatus.rejected;
-                          }
+                              resultStatus = PaymentStatus.success;
+                            } else {
+                              resultStatus = PaymentStatus.rejected;
+                            }
 
                           setState(() {
                             _simulateSuccess = !_simulateSuccess;
@@ -381,28 +528,34 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
                           );
                           // (Fin de tu simulación de pago)
 
-
                           // --- NUEVO: GUARDAMOS EN EL HISTORIAL SI EL PAGO FUE EXITOSO ---
                           if (resultStatus == PaymentStatus.success) {
-                            
                             try {
-                              final prefs = await SharedPreferences.getInstance();
-                              final List<String> historialJson = prefs.getStringList('historial') ?? [];
-                              final String timestamp = DateTime.now().toIso8601String();
-                              
-                              final List<String> nuevosItemsJson = _pasajesSeleccionados.map((pasaje) {
-                                final Map<String, dynamic> transaccion = {
-                                  // ¡¡LA CLAVE ESTÁ AQUÍ!!
-                                  'type': 'trufi', // ¡TIPO ESPECÍFICO DE TRUFI!
-                                  'timestamp': timestamp,
-                                  'nombre': pasaje.nombre,
-                                  'precio': pasaje.precio,
-                                };
-                                return json.encode(transaccion);
-                              }).toList();
+                              final prefs =
+                                  await SharedPreferences.getInstance();
+                              final List<String> historialJson =
+                                  prefs.getStringList('historial') ?? [];
+                              final String timestamp = DateTime.now()
+                                  .toIso8601String();
+
+                              final List<String> nuevosItemsJson =
+                                  _pasajesSeleccionados.map((pasaje) {
+                                    final Map<String, dynamic> transaccion = {
+                                      // ¡¡LA CLAVE ESTÁ AQUÍ!!
+                                      'type':
+                                          'trufi', // ¡TIPO ESPECÍFICO DE TRUFI!
+                                      'timestamp': timestamp,
+                                      'nombre': pasaje.nombre,
+                                      'precio': pasaje.precio,
+                                    };
+                                    return json.encode(transaccion);
+                                  }).toList();
 
                               historialJson.addAll(nuevosItemsJson);
-                              await prefs.setStringList('historial', historialJson);
+                              await prefs.setStringList(
+                                'historial',
+                                historialJson,
+                              );
                               print("Historial de Trufi guardado!");
                             } catch (e) {
                               print("Error al guardar historial: $e");
@@ -414,6 +567,7 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
                             });
                           }
                         },
+                        isLoading: _isLoading,
                       );
                     },
                   );
@@ -443,7 +597,6 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
     );
   }
   // --- FIN MODIFICADO ---
-
 
   Widget _buildSummaryCard(BuildContext context) {
     // ... (Tu _buildSummaryCard y _buildSummaryItem no necesitan cambios)
