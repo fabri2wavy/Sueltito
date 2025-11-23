@@ -10,6 +10,11 @@ import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
 import 'package:sueltito/core/constants/pasaje_constants.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // <-- nuevo
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart'; // <-- nuevo
+import 'package:sueltito/core/network/api_client.dart';
+import 'package:sueltito/features/payment/infra/datasources/payment_remote_ds.dart';
+import 'package:sueltito/features/payment/infra/repositories/payment_repository_impl.dart';
+import 'package:sueltito/features/payment/domain/usecases/prepare_pasaje_usecase.dart';
+import 'package:sueltito/features/payment/domain/entities/pasaje_prepare_request.dart';
 
 class MinibusPaymentPage extends ConsumerStatefulWidget {
   const MinibusPaymentPage({super.key});
@@ -298,7 +303,6 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
     );
   }
 
-  @override
   Widget _buildPayButton(BuildContext context) {
     bool hasItems = _pasajesSeleccionados.isNotEmpty;
     // usamos ref para leer el usuario logueado
@@ -346,59 +350,61 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
                           final double montoTotal = totalAPagar;
 
                           // Armar JSON EXACTO como lo pediste
-                          final Map<String, dynamic> payloadToSend = {
-                            'tramite': {
-                              'tramite_id': ' ',
-                              'numero_autorizacion': ' ',
-                              'codigo_otp': ' ',
-                            },
-                            'servicio': {
-                              'tipo':
-                                  servicio['tipo'] ??
-                                  servicio['tipo_transporte'] ??
-                                  '01',
-                              'nombre': servicio['nombre'] ?? '',
-                              'tipo_identificador':
-                                  servicio['tipo_identificador'] ?? '',
-                              'identificador': servicio['identificador'] ?? '',
-                              'codigo_entidad':
-                                  servicio['entidad'] ??
-                                  servicio['codigo_entidad'] ??
-                                  '',
-                            },
-                            'tag': {
-                              // identificador <- tag.tag_uid del NFC
-                              'identificador':
-                                  tag['tag_uid'] ?? tag['identificador'] ?? '',
-                            },
-                            'usuario': {
-                              // pasajero: desde authProvider (ref)
-                              'pasajero_id': pasajeroId,
-                              'conductor_id':
-                                  propietario['identificador'] ?? '',
-                              'pasajero_cuenta': pasajeroCuenta,
-                              // conductor_cuenta: hardcodeado con los datos del NFC (propietario.cuenta)
-                              'conductor_cuenta': propietario['cuenta'] ?? '',
-                            },
-                            'pago': {
-                              'tipo_transporte':
-                                  servicio['tipo_transporte'] ??
-                                  servicio['tipo'] ??
-                                  '01',
-                              'forma_pago': '01',
-                              'monto_total': montoTotal,
-                              'detalle': detalle,
-                            },
-                            'glosa': 'Pago Pasaje',
-                          };
+                          // We build the domain request instead of a raw JSON payload, use the use case below.
 
-                          // Debug print para validar estructura
-                          print(
-                            'Payload /api/pasaje/prepare: ${json.encode(payloadToSend)}',
-                          );
+                          // Llamamos al UseCase para preparar el pasaje
+                          try {
+                            final apiClient = ApiClient();
+                            final remoteDS = PaymentRemoteDataSourceImpl(apiClient: apiClient);
+                            final repository = PaymentRepositoryImpl(remoteDataSource: remoteDS);
+                            final usecase = PreparePasajeUseCase(repository);
 
-                          // Aquí llamarías a tu UseCase/API Client:
-                          // await ApiClient.instance.post('/api/pasaje/prepare', payloadToSend);
+                            // Build domain request
+                            final tramite = TramiteEntity(tramiteId: ' ', numeroAutorizacion: ' ', codigoOtp: ' ');
+                            final servicioEntity = ServicioEntity(
+                              tipo: servicio['tipo'] ?? servicio['tipo_transporte'] ?? '01',
+                              nombre: servicio['nombre'] ?? '',
+                              tipoIdentificador: servicio['tipo_identificador'] ?? '',
+                              identificador: servicio['identificador'] ?? '',
+                              codigoEntidad: servicio['entidad'] ?? servicio['codigo_entidad'] ?? '',
+                            );
+                            final tagEntity = TagEntity(identificador: tag['tag_uid'] ?? tag['identificador'] ?? '');
+                            final usuarioEntity = UsuarioPagoEntity(
+                              pasajeroId: pasajeroId,
+                              conductorId: propietario['identificador'] ?? '',
+                              pasajeroCuenta: pasajeroCuenta,
+                              conductorCuenta: propietario['cuenta'] ?? '',
+                            );
+                            final pagoEntity = PagoEntity(
+                              tipoTransporte: servicio['tipo_transporte'] ?? servicio['tipo'] ?? '01',
+                              formaPago: '01',
+                              montoTotal: montoTotal,
+                              detalle: detalle.map((d) => PagoDetalleEntity(tipoPago: d['tipo_pago'] ?? '')).toList(),
+                            );
+
+                            final requestDomain = PasajePrepareRequest(
+                              tramite: tramite,
+                              servicio: servicioEntity,
+                              tag: tagEntity,
+                              usuario: usuarioEntity,
+                              pago: pagoEntity,
+                              glosa: 'Pago Pasaje',
+                            );
+
+                            // Run use case
+                            final response = await usecase(requestDomain);
+                            print('Prepare response: ${response.mensaje}');
+                            if (response.continuarFlujo) {
+                              // Show a short message with the returned numero_autorizacion
+                              final msg = response.data?.numeroAutorizacion ?? response.mensaje;
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+                              }
+                            }
+                          } catch (e) {
+                            print('Error preparando pasaje: $e');
+                            // Optionally show toast/dialog with error
+                          }
 
                           // Simulación de envío + manejo de resultado (igual que antes)
                           await Future.delayed(

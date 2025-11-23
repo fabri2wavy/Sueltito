@@ -6,16 +6,23 @@ import 'package:sueltito/core/config/app_theme.dart';
 import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sueltito/core/constants/pasaje_constants.dart';
+import 'package:sueltito/features/payment/infra/datasources/payment_remote_ds.dart';
+import 'package:sueltito/features/payment/infra/repositories/payment_repository_impl.dart';
+import 'package:sueltito/features/payment/domain/usecases/prepare_pasaje_usecase.dart';
+import 'package:sueltito/features/payment/domain/entities/pasaje_prepare_request.dart';
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sueltito/core/network/api_client.dart';
 
-class TaxiPaymentPage extends StatefulWidget {
+class TaxiPaymentPage extends ConsumerStatefulWidget {
   const TaxiPaymentPage({super.key});
 
   @override
-  State<TaxiPaymentPage> createState() => _TaxiPaymentPageState();
+  ConsumerState<TaxiPaymentPage> createState() => _TaxiPaymentPageState();
 }
 
-class _TaxiPaymentPageState extends State<TaxiPaymentPage> {
+class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
   // --- NUEVO: Variable para los datos del NFC ---
   Map<String, dynamic>? _conductorData;
   // --- FIN NUEVO ---
@@ -245,33 +252,36 @@ class _TaxiPaymentPageState extends State<TaxiPaymentPage> {
                         onConfirm: () async {
                           
                           // --- NUEVO: Preparar Payload para Backend ---
-                          final List<Map<String, dynamic>> pasajesJSON =
-                              _pasajesSeleccionados.map((p) => {
-                                    'tipo_pago': p.codigo ?? PasajeConstants.taxiOption().codigo,
-                                    'nombre': p.nombre,
-                                    'precio': p.precio,
-                                  }).toList();
+                          // Build domain request and call use case below; no raw payload needed
+                          try {
+                            final apiClient = ApiClient();
+                            final remoteDS = PaymentRemoteDataSourceImpl(apiClient: apiClient);
+                            final repository = PaymentRepositoryImpl(remoteDataSource: remoteDS);
+                            final usecase = PreparePasajeUseCase(repository);
+                            final propietario = _conductorData!['propietario'] as Map<String, dynamic>? ?? {};
+                            final servicio = _conductorData!['servicio'] as Map<String, dynamic>? ?? {};
+                            final tag = _conductorData!['tag'] as Map<String, dynamic>? ?? {};
+                            final currentUser = ref.read(currentUserProvider);
+                            final pasajeroId = currentUser?.id ?? '';
+                            final pasajeroCuenta = currentUser?.nroCuenta ?? '';
+                            // detalle (raw) not required because domain PagoDetalleEntity will be created below
+                            final tramite = TramiteEntity(tramiteId: '', numeroAutorizacion: '', codigoOtp: '');
+                            final servicioEntity = ServicioEntity(tipo: servicio['tipo'] ?? servicio['tipo_transporte'] ?? '03', nombre: servicio['nombre'] ?? '', tipoIdentificador: servicio['tipo_identificador'] ?? '', identificador: servicio['identificador'] ?? '', codigoEntidad: servicio['entidad'] ?? servicio['codigo_entidad'] ?? '');
+                            final tagEntity = TagEntity(identificador: tag['tag_uid'] ?? tag['identificador'] ?? '');
+                            final usuarioEntity = UsuarioPagoEntity(pasajeroId: pasajeroId, conductorId: propietario['identificador'] ?? '', pasajeroCuenta: pasajeroCuenta, conductorCuenta: propietario['cuenta'] ?? '');
+                            final pagoEntity = PagoEntity(tipoTransporte: servicio['tipo_transporte'] ?? servicio['tipo'] ?? '03', formaPago: '01', montoTotal: totalAPagar, detalle: _pasajesSeleccionados.map((p) => PagoDetalleEntity(tipoPago: p.codigo ?? '')).toList());
+                            final requestDomain = PasajePrepareRequest(tramite: tramite, servicio: servicioEntity, tag: tagEntity, usuario: usuarioEntity, pago: pagoEntity, glosa: 'Pago Pasaje');
+                            final response = await usecase(requestDomain);
+                            print('Prepare response taxi: ${response.mensaje}');
+                            if (response.continuarFlujo) {
+                              final msg = response.data?.numeroAutorizacion ?? response.mensaje;
+                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+                            }
+                          } catch (e) {
+                            print('Error preparando pasaje taxi: $e');
+                          }
 
-                          final Map<String, dynamic> payloadToSend = {
-                            'info_conductor': _conductorData,
-                            'servicio': _conductorData!['servicio'] ?? {},
-                            'tag': _conductorData!['tag'] ?? {},
-                            'usuario': {
-                              'pasajero_id': 'fabricio_id',
-                              'conductor_id': _conductorData!['propietario']?['id'] ?? '',
-                            },
-                            'pago': {
-                              'monto_total': totalAPagar,
-                              'tipo_transporte': PasajeConstants.taxiOption().tipoTransporte,
-                              'forma_pago': 'EFECTIVO',
-                              'detalle': pasajesJSON.map((p) => {'tipo_pago': p['tipo_pago'], 'monto': p['precio']}).toList(),
-                            },
-                            'glosa': 'Pago Taxi',
-                            'timestamp': DateTime.now().toIso8601String(),
-                          };
-                          
                           print("--- ENVIANDO PAGO TAXI ---");
-                          print(json.encode(payloadToSend));
                           // --- FIN NUEVO ---
 
                           await Future.delayed(
