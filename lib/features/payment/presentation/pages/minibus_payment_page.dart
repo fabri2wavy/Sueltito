@@ -14,6 +14,7 @@ import 'package:sueltito/core/network/api_client.dart';
 import 'package:sueltito/features/payment/infra/datasources/payment_remote_ds.dart';
 import 'package:sueltito/features/payment/infra/repositories/payment_repository_impl.dart';
 import 'package:sueltito/features/payment/domain/usecases/prepare_pasaje_usecase.dart';
+import 'package:sueltito/features/payment/domain/usecases/register_pasaje_usecase.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje_prepare_request.dart';
 
 class MinibusPaymentPage extends ConsumerStatefulWidget {
@@ -27,6 +28,7 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
   Map<String, dynamic>? _conductorData;
   bool _isPreferencial = false;
   final List<Pasaje> _pasajesSeleccionados = [];
+  bool _isLoading = false;
   bool _simulateSuccess = true;
 
   PasajeInfo get _minibusCorto => PasajeConstants.PAP_PASAJES['000001']!;
@@ -313,7 +315,7 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
     return Column(
       children: [
         ElevatedButton(
-          onPressed: hasItems
+      onPressed: hasItems && !_isLoading
               ? () {
                   showDialog(
                     context: context,
@@ -323,6 +325,7 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
                         pasajes: _pasajesSeleccionados,
                         total: totalAPagar,
                         onConfirm: () async {
+                          setState(() { _isLoading = true; });
                           // Datos del conductor sacados del NFC
                           final propietario =
                               _conductorData?['propietario']
@@ -395,15 +398,27 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
                             final response = await usecase(requestDomain);
                             print('Prepare response: ${response.mensaje}');
                             if (response.continuarFlujo) {
-                              // Show a short message with the returned numero_autorizacion
-                              final msg = response.data?.numeroAutorizacion ?? response.mensaje;
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+                              final registerUsecase = RegisterPasajeUseCase(repository);
+                              final tramiteFilled = TramiteEntity(tramiteId: response.data?.idTramite ?? '', numeroAutorizacion: response.data?.numeroAutorizacion ?? '', codigoOtp: '1234');
+                              final requestConfirm = PasajePrepareRequest(
+                                tramite: tramiteFilled,
+                                servicio: servicioEntity,
+                                tag: tagEntity,
+                                usuario: usuarioEntity,
+                                pago: pagoEntity,
+                                glosa: 'Pago Pasaje',
+                              );
+                              final confirmResp = await registerUsecase(requestConfirm);
+                              if (confirmResp.continuarFlujo) {
+                                final msg = confirmResp.data?.numeroAutorizacion ?? confirmResp.mensaje;
+                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirmado: $msg')));
                               }
                             }
                           } catch (e) {
                             print('Error preparando pasaje: $e');
                             // Optionally show toast/dialog with error
+                          } finally {
+                            setState(() { _isLoading = false; });
                           }
 
                           // Simulación de envío + manejo de resultado (igual que antes)
@@ -456,6 +471,7 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
                             });
                           }
                         },
+                        isLoading: _isLoading,
                       );
                     },
                   );

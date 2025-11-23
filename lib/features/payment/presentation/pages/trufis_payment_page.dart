@@ -13,6 +13,7 @@ import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart
 import 'package:sueltito/features/payment/infra/datasources/payment_remote_ds.dart';
 import 'package:sueltito/features/payment/infra/repositories/payment_repository_impl.dart';
 import 'package:sueltito/features/payment/domain/usecases/prepare_pasaje_usecase.dart';
+import 'package:sueltito/features/payment/domain/usecases/register_pasaje_usecase.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje_prepare_request.dart';
 import 'package:sueltito/core/constants/pasaje_constants.dart';
 
@@ -28,6 +29,7 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
   String? _conductorTipoTransporte;
 
   bool _isPreferencial = false;
+  bool _isLoading = false;
   final List<Pasaje> _pasajesSeleccionados = [];
   bool _simulateSuccess = true;
 
@@ -396,8 +398,8 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
     return Column(
       children: [
         ElevatedButton(
-          onPressed: hasItems
-              ? () {
+      onPressed: hasItems && !_isLoading
+        ? () {
                   showDialog(
                     context: context,
                     barrierDismissible: false,
@@ -405,7 +407,8 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
                       return PaymentConfirmationDialog(
                         pasajes: _pasajesSeleccionados,
                         total: totalAPagar,
-                        onConfirm: () async {
+            onConfirm: () async {
+              setState(() { _isLoading = true; });
                           // --- NUEVO: PREPARAMOS LOS DATOS ANTES DE PAGAR ---
                           // Using domain detalle mapping instead of raw pasajesJSON
 
@@ -420,18 +423,12 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
                               remoteDataSource: remoteDS,
                             );
                             final usecase = PreparePasajeUseCase(repository);
-                            final propietario =
-                                _conductorData!['propietario']
-                                    as Map<String, dynamic>? ??
-                                {};
+              final propietario = _conductorData!['propietario'] as Map<String, dynamic>? ?? {};
                             final servicio =
                                 _conductorData!['servicio']
                                     as Map<String, dynamic>? ??
                                 {};
-                            final tag =
-                                _conductorData!['tag']
-                                    as Map<String, dynamic>? ??
-                                {};
+              final tag = _conductorData!['tag'] as Map<String, dynamic>? ?? {};
                             // pasajero and cuenta read from auth
                             // Note: use currentUserProvider or auth provider to read logged user
                             final currentUser = ref.read(currentUserProvider);
@@ -494,8 +491,20 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
                             print(
                               'Prepare response trufi: ${response.mensaje}',
                             );
+                            if (response.continuarFlujo) {
+                              final registerUsecase = RegisterPasajeUseCase(repository);
+                              final tramiteFilled = TramiteEntity(tramiteId: response.data?.idTramite ?? '', numeroAutorizacion: response.data?.numeroAutorizacion ?? '', codigoOtp: '');
+                              final requestConfirm = PasajePrepareRequest(tramite: tramiteFilled, servicio: servicioEntity, tag: tagEntity, usuario: usuarioEntity, pago: pagoEntity, glosa: 'Pago Pasaje');
+                              final confirmResp = await registerUsecase(requestConfirm);
+                              if (confirmResp.continuarFlujo) {
+                                final msg = confirmResp.data?.numeroAutorizacion ?? confirmResp.mensaje;
+                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirmado: $msg')));
+                              }
+                            }
                           } catch (e) {
                             print('Error preparando pasaje trufi: $e');
+                          } finally {
+                            if (mounted) setState(() { _isLoading = false; });
                           }
                           // --- FIN NUEVO ---
                           final PaymentStatus resultStatus;
@@ -558,6 +567,7 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
                             });
                           }
                         },
+                        isLoading: _isLoading,
                       );
                     },
                   );

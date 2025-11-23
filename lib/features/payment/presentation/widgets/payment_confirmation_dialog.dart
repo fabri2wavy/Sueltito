@@ -7,12 +7,14 @@ class PaymentConfirmationDialog extends StatelessWidget {
   final List<Pasaje> pasajes;
   final double total;
   final VoidCallback onConfirm;
+  final bool isLoading;
 
   const PaymentConfirmationDialog({
     super.key,
     required this.pasajes,
     required this.total,
     required this.onConfirm,
+    this.isLoading = false,
   });
 
   @override
@@ -126,7 +128,7 @@ class PaymentConfirmationDialog extends StatelessWidget {
                 // Botón Cancelar
                 Expanded(
                   child: ElevatedButton(
-                      onPressed: () => context.pop(), 
+                      onPressed: isLoading ? null : () => context.pop(), 
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey[600],
                       foregroundColor: Colors.white,
@@ -143,7 +145,7 @@ class PaymentConfirmationDialog extends StatelessWidget {
                 // Botón Pagar
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: onConfirm,
+                    onPressed: isLoading ? null : onConfirm,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryGreen,
                       foregroundColor: Colors.white,
@@ -153,7 +155,23 @@ class PaymentConfirmationDialog extends StatelessWidget {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text('Pagar'),
+                    child: isLoading
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.0,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                            Text('Procesando...'),
+                          ],
+                        )
+                      : const Text('Pagar'),
                   ),
                 ),
               ],

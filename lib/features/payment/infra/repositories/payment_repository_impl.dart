@@ -14,4 +14,10 @@ class PaymentRepositoryImpl implements PaymentRepository {
     final responseModel = await remoteDataSource.preparePasaje(requestModel);
     return responseModel.toEntity();
   }
+  @override
+  Future<PasajePrepareResponse> registerPasaje(PasajePrepareRequest request) async {
+    final requestModel = PasajePrepareRequestModel.fromEntity(request);
+    final responseModel = await remoteDataSource.registerPasaje(requestModel);
+    return responseModel.toEntity();
+  }
 }

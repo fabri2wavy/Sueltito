@@ -11,6 +11,7 @@ import 'package:sueltito/core/constants/pasaje_constants.dart';
 import 'package:sueltito/features/payment/infra/datasources/payment_remote_ds.dart';
 import 'package:sueltito/features/payment/infra/repositories/payment_repository_impl.dart';
 import 'package:sueltito/features/payment/domain/usecases/prepare_pasaje_usecase.dart';
+import 'package:sueltito/features/payment/domain/usecases/register_pasaje_usecase.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje_prepare_request.dart';
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 import 'package:sueltito/core/network/api_client.dart';
@@ -29,6 +30,7 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
 
   final List<Pasaje> _pasajesSeleccionados = [];
   bool _simulateSuccess = true;
+  bool _isLoading = false;
   final TextEditingController _montoController = TextEditingController();
   String? _montoError;
 
@@ -240,8 +242,8 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
     return Column(
       children: [
         ElevatedButton(
-          onPressed: hasItems
-              ? () {
+      onPressed: hasItems && !_isLoading
+        ? () {
                   showDialog(
                     context: context,
                     barrierDismissible: false,
@@ -250,6 +252,7 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
                         pasajes: _pasajesSeleccionados,
                         total: totalAPagar,
                         onConfirm: () async {
+                          setState(() { _isLoading = true; });
                           
                           // --- NUEVO: Preparar Payload para Backend ---
                           // Build domain request and call use case below; no raw payload needed
@@ -274,11 +277,19 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
                             final response = await usecase(requestDomain);
                             print('Prepare response taxi: ${response.mensaje}');
                             if (response.continuarFlujo) {
-                              final msg = response.data?.numeroAutorizacion ?? response.mensaje;
-                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+                              final registerUsecase = RegisterPasajeUseCase(repository);
+                              final tramiteFilled = TramiteEntity(tramiteId: response.data?.idTramite ?? '', numeroAutorizacion: response.data?.numeroAutorizacion ?? '', codigoOtp: '');
+                              final requestConfirm = PasajePrepareRequest(tramite: tramiteFilled, servicio: servicioEntity, tag: tagEntity, usuario: usuarioEntity, pago: pagoEntity, glosa: 'Pago Pasaje');
+                              final confirmResp = await registerUsecase(requestConfirm);
+                              if (confirmResp.continuarFlujo) {
+                                final msg = confirmResp.data?.numeroAutorizacion ?? confirmResp.mensaje;
+                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirmado: $msg')));
+                              }
                             }
                           } catch (e) {
                             print('Error preparando pasaje taxi: $e');
+                          } finally {
+                            if (mounted) setState(() { _isLoading = false; });
                           }
 
                           print("--- ENVIANDO PAGO TAXI ---");
@@ -344,6 +355,7 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
                           }
                           // --- FIN NUEVO ---
                         },
+                        isLoading: _isLoading,
                       );
                     },
                   );
