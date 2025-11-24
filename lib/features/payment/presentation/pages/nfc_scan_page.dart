@@ -17,12 +17,11 @@ class NfcScanPage extends StatefulWidget {
 class _NfcScanPageState extends State<NfcScanPage>
     with SingleTickerProviderStateMixin {
   
-  // (Ya no necesitamos la variable estática _hasAutoScanned porque SIEMPRE escanea)
 
   bool scanning = false;
   bool success = false;
   bool hasError = false; 
-  String message = "Buscando punto de pago..."; // Mensaje por defecto
+  String message = "Buscando punto de pago..."; 
 
   late AnimationController _controller;
   late Animation<double> _pulseAnimation;
@@ -44,10 +43,7 @@ class _NfcScanPageState extends State<NfcScanPage>
 
     _cargarHistorial();
 
-    // --- CAMBIO 1: SIEMPRE INICIAMOS EL ESCANEO ---
-    // No importa si es la 1ra o la 10ma vez, arrancamos el radar.
     Future.delayed(const Duration(milliseconds: 300), _startScan);
-    // ----------------------------------------------
   }
 
   Future<void> _cargarHistorial() async {
@@ -128,7 +124,7 @@ class _NfcScanPageState extends State<NfcScanPage>
       switch (tipoTransporte) {
         case '01': rutaDestino = AppPaths.minibusPayment; break;
         case '02': rutaDestino = AppPaths.trufisPayment; break;
-        case '04': rutaDestino = AppPaths.trufisPayment; break; // Trufi Zonal
+        case '04': rutaDestino = AppPaths.trufisPayment; break; 
         case '03': rutaDestino = AppPaths.taxiPayment; break;
         default:
           print('[NFC] Transporte desconocido');
@@ -227,7 +223,7 @@ class _NfcScanPageState extends State<NfcScanPage>
                   ),
                   child: const Icon(Icons.cancel_rounded, size: 100, color: Colors.red),
                 )
-              : ScaleTransition( // ESTADO ESCANEANDO (Siempre activo)
+              : ScaleTransition( 
                   key: const ValueKey('pulse'),
                   scale: _pulseAnimation,
                   child: Container(
@@ -316,12 +312,9 @@ class _NfcScanPageState extends State<NfcScanPage>
                     
                     const SizedBox(height: 34),
 
-                    // --- CAMBIO 3: EL BOTÓN SÓLO APARECE SI NO ESTÁ ESCANEANDO ---
-                    // Como ahora siempre escanea, esto significa que el botón 
-                    // SOLO aparece si hubo un ERROR (hasError = true).
                     if (!scanning)
                       ElevatedButton(
-                        onPressed: _startScan, // Al presionar, reinicia el bucle
+                        onPressed: _startScan, 
                         style: ElevatedButton.styleFrom(
                           backgroundColor: hasError ? Colors.red : AppColors.primaryGreen,
                           foregroundColor: Colors.white,
@@ -340,7 +333,6 @@ class _NfcScanPageState extends State<NfcScanPage>
                     else
                       // Espacio vacío para mantener la altura cuando no hay botón
                       const SizedBox(height: 52), 
-                    // -------------------------------------------------------------
                   ],
                 ),
               ),
@@ -384,7 +376,7 @@ class _NfcScanPageState extends State<NfcScanPage>
                   else
                     ..._ultimasTransacciones.map((transaccion) {
                       final String tipo = (transaccion['type'] ?? '...').toString().toUpperCase();
-                      final String nombre = transaccion['nombre'] ?? 'Error';
+                      final String label = (transaccion['nombre'] ?? 'Error').toString();
                       final double precio = (transaccion['precio'] is num) 
                           ? (transaccion['precio'] as num).toDouble() 
                           : 0.0;
@@ -394,9 +386,16 @@ class _NfcScanPageState extends State<NfcScanPage>
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              "$tipo:\n$nombre",
-                              style: const TextStyle(fontSize: 14),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(label, style: const TextStyle(fontSize: 14)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  tipo,
+                                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                ),
+                              ],
                             ),
                             Text(
                               "Bs ${precio.toStringAsFixed(2)}",

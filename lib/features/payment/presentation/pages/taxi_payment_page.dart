@@ -1,20 +1,14 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:flutter/material.dart';
 import 'package:sueltito/core/config/app_theme.dart';
-import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
-import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
-import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sueltito/core/constants/pasaje_constants.dart';
-import 'package:sueltito/features/payment/infra/datasources/payment_remote_ds.dart';
-import 'package:sueltito/features/payment/infra/repositories/payment_repository_impl.dart';
-import 'package:sueltito/features/payment/domain/usecases/prepare_pasaje_usecase.dart';
-import 'package:sueltito/features/payment/domain/usecases/register_pasaje_usecase.dart';
-import 'package:sueltito/features/payment/domain/entities/pasaje_prepare_request.dart';
+import 'package:sueltito/features/payment/presentation/providers/payment_provider.dart';
+import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
+import 'package:sueltito/features/payment/presentation/widgets/send_button.dart';
+import 'package:sueltito/core/services/notification_service.dart';
+import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
-import 'package:sueltito/core/network/api_client.dart';
 
 class TaxiPaymentPage extends ConsumerStatefulWidget {
   const TaxiPaymentPage({super.key});
@@ -24,13 +18,6 @@ class TaxiPaymentPage extends ConsumerStatefulWidget {
 }
 
 class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
-  // --- NUEVO: Variable para los datos del NFC ---
-  Map<String, dynamic>? _conductorData;
-  // --- FIN NUEVO ---
-
-  final List<Pasaje> _pasajesSeleccionados = [];
-  bool _simulateSuccess = true;
-  bool _isLoading = false;
   final TextEditingController _montoController = TextEditingController();
   String? _montoError;
 
@@ -40,23 +27,15 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
     _montoController.addListener(_actualizarMonto);
   }
 
-  // --- NUEVO: Recibir datos del NFC ---
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_conductorData == null) {
-      final state = GoRouterState.of(context);
-      final extra = state.extra;
-      if (extra != null && extra is Map<String, dynamic>) {
-        setState(() {
-          _conductorData = extra;
-        });
-      } else {
-        print("Error: TaxiPaymentPage se abrió sin datos del conductor.");
-      }
+    final state = GoRouterState.of(context);
+    final extra = state.extra;
+    if (extra == null || !(extra is Map<String, dynamic>)) {
+      print("Error: TaxiPaymentPage se abrió sin datos del conductor.");
     }
   }
-  // --- FIN NUEVO ---
 
   @override
   void dispose() {
@@ -65,37 +44,33 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
     super.dispose();
   }
 
-  // --- LÓGICA ---
   void _actualizarMonto() {
     double? monto = double.tryParse(_montoController.text);
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    if (extra != null) {
+      ref.read(paymentProvider(extra).notifier).setMonto(monto);
+    }
     setState(() {
-      _pasajesSeleccionados.clear(); // Limpiamos la lista
-      if (monto != null && monto > 0) {
-        // Si el monto es válido, lo añadimos como el único pasaje
-        final taxiInfo = PasajeConstants.taxiOption();
-        _pasajesSeleccionados.add(Pasaje(nombre: 'Pasaje Taxi', precio: monto, codigo: taxiInfo.codigo));
-        _montoError = null;
-      } else if (_montoController.text.isNotEmpty) {
-        _montoError = "Monto inválido"; // Error si escriben "abc"
-      } else {
-        _montoError = null; // Sin error si está vacío
-      }
+      _montoError = monto == null || monto <= 0
+          ? (_montoController.text.isNotEmpty ? 'Monto inválido' : null)
+          : null;
     });
   }
 
-  double get totalAPagar =>
-      _pasajesSeleccionados.fold(0.0, (sum, item) => sum + item.precio);
+  double get totalAPagar {
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    return extra == null ? 0.0 : ref.watch(paymentProvider(extra)).totalAPagar;
+  }
 
-  // --- BUILD ---
   @override
   Widget build(BuildContext context) {
-    // --- NUEVO: Loading state ---
-    if (_conductorData == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    if (extra == null)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final paymentState = ref.watch(paymentProvider(extra));
+    if (paymentState.conductorData == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    // --- FIN NUEVO ---
 
     return Scaffold(
       appBar: _buildAppBar(context),
@@ -108,8 +83,7 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // --- MODIFICADO: Pasamos los datos ---
-                  _buildDriverInfoCard(_conductorData!), 
+                  _buildDriverInfoCard(paymentState.conductorData!),
                   const SizedBox(height: 24),
                   _buildFareSelection(context),
                   const SizedBox(height: 24),
@@ -138,19 +112,20 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
         'Bienvenido al Taxi\nFabricio',
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: AppColors.primaryGreen,
-              fontWeight: FontWeight.bold,
-            ),
+          color: AppColors.primaryGreen,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
 
-  // --- MODIFICADO: Tarjeta Dinámica ---
   Widget _buildDriverInfoCard(Map<String, dynamic> driverData) {
-    final propietario = driverData['propietario'] as Map<String, dynamic>? ?? {};
+    final propietario =
+        driverData['propietario'] as Map<String, dynamic>? ?? {};
     final servicio = driverData['servicio'] as Map<String, dynamic>? ?? {};
 
-    final String nombre = propietario['nombre'] as String? ?? 'Conductor no encontrado';
+    final String nombre =
+        propietario['nombre'] as String? ?? 'Conductor no encontrado';
     final String placa = servicio['identificador'] as String? ?? 'S/N';
     final String nombreEmpresa = servicio['nombre'] as String? ?? 'Radio Taxi';
 
@@ -168,7 +143,10 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
             children: [
               Text(
                 'Placa: $placa',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -176,7 +154,7 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
                 style: TextStyle(fontSize: 14, color: Colors.grey[800]),
               ),
               Text(
-                nombreEmpresa, // Ej: "RADIO TAXI MAGNIFICO"
+                nombreEmpresa, 
                 style: TextStyle(fontSize: 14, color: Colors.grey[700]),
               ),
             ],
@@ -186,10 +164,8 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
       ),
     );
   }
-  // --- FIN MODIFICADO ---
 
   Widget _buildFareSelection(BuildContext context) {
-    // (Esta parte está bien, es tu input de monto manual)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -204,17 +180,17 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
           controller: _montoController,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textBlack,
-              ),
+            fontWeight: FontWeight.bold,
+            color: AppColors.textBlack,
+          ),
           decoration: InputDecoration(
             hintText: '0.00',
             hintStyle: TextStyle(color: Colors.grey[400]),
             prefixText: 'Bs ',
             prefixStyle: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[600],
-                ),
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[600],
+            ),
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(
@@ -237,164 +213,108 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
   }
 
   Widget _buildPayButton(BuildContext context) {
-    bool hasItems = _pasajesSeleccionados.isNotEmpty;
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    if (extra == null) return const SizedBox.shrink();
+    final paymentState = ref.watch(paymentProvider(extra));
+    bool hasItems = paymentState.selectedPasajes.isNotEmpty;
 
-    return Column(
-      children: [
-        ElevatedButton(
-      onPressed: hasItems && !_isLoading
-        ? () {
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (dialogContext) {
-                      return PaymentConfirmationDialog(
-                        pasajes: _pasajesSeleccionados,
-                        total: totalAPagar,
-                        onConfirm: () async {
-                          setState(() { _isLoading = true; });
-                          
-                          // --- NUEVO: Preparar Payload para Backend ---
-                          // Build domain request and call use case below; no raw payload needed
-                          try {
-                            final apiClient = ApiClient();
-                            final remoteDS = PaymentRemoteDataSourceImpl(apiClient: apiClient);
-                            final repository = PaymentRepositoryImpl(remoteDataSource: remoteDS);
-                            final usecase = PreparePasajeUseCase(repository);
-                            final propietario = _conductorData!['propietario'] as Map<String, dynamic>? ?? {};
-                            final servicio = _conductorData!['servicio'] as Map<String, dynamic>? ?? {};
-                            final tag = _conductorData!['tag'] as Map<String, dynamic>? ?? {};
-                            final currentUser = ref.read(currentUserProvider);
-                            final pasajeroId = currentUser?.id ?? '';
-                            final pasajeroCuenta = currentUser?.nroCuenta ?? '';
-                            // detalle (raw) not required because domain PagoDetalleEntity will be created below
-                            final tramite = TramiteEntity(tramiteId: '', numeroAutorizacion: '', codigoOtp: '');
-                            final servicioEntity = ServicioEntity(tipo: servicio['tipo'] ?? servicio['tipo_transporte'] ?? '03', nombre: servicio['nombre'] ?? '', tipoIdentificador: servicio['tipo_identificador'] ?? '', identificador: servicio['identificador'] ?? '', codigoEntidad: servicio['entidad'] ?? servicio['codigo_entidad'] ?? '');
-                            final tagEntity = TagEntity(identificador: tag['tag_uid'] ?? tag['identificador'] ?? '');
-                            final usuarioEntity = UsuarioPagoEntity(pasajeroId: pasajeroId, conductorId: propietario['identificador'] ?? '', pasajeroCuenta: pasajeroCuenta, conductorCuenta: propietario['cuenta'] ?? '');
-                            final pagoEntity = PagoEntity(tipoTransporte: servicio['tipo_transporte'] ?? servicio['tipo'] ?? '03', formaPago: '01', montoTotal: totalAPagar, detalle: _pasajesSeleccionados.map((p) => PagoDetalleEntity(tipoPago: p.codigo ?? '')).toList());
-                            final requestDomain = PasajePrepareRequest(tramite: tramite, servicio: servicioEntity, tag: tagEntity, usuario: usuarioEntity, pago: pagoEntity, glosa: 'Pago Pasaje');
-                            final response = await usecase(requestDomain);
-                            print('Prepare response taxi: ${response.mensaje}');
-                            if (response.continuarFlujo) {
-                              final registerUsecase = RegisterPasajeUseCase(repository);
-                              final tramiteFilled = TramiteEntity(tramiteId: response.data?.idTramite ?? '', numeroAutorizacion: response.data?.numeroAutorizacion ?? '', codigoOtp: '');
-                              final requestConfirm = PasajePrepareRequest(tramite: tramiteFilled, servicio: servicioEntity, tag: tagEntity, usuario: usuarioEntity, pago: pagoEntity, glosa: 'Pago Pasaje');
-                              final confirmResp = await registerUsecase(requestConfirm);
-                              if (confirmResp.continuarFlujo) {
-                                final msg = confirmResp.data?.numeroAutorizacion ?? confirmResp.mensaje;
-                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirmado: $msg')));
-                              }
-                            }
-                          } catch (e) {
-                            print('Error preparando pasaje taxi: $e');
-                          } finally {
-                            if (mounted) setState(() { _isLoading = false; });
-                          }
+    return SendButton(
+      isEnabled: hasItems,
+      isLoading: paymentState.isLoading,
+      onPressed: () async {
+        if (!mounted) return;
+        final currentUser = ref.read(currentUserProvider);
+        final pasajeroId = currentUser?.id ?? '';
+        final pasajeroCuenta = currentUser?.nroCuenta ?? '';
+        final notifSvc = ref.read(notificationServiceProvider);
+        try {
+          final prepareResp = await ref
+              .read(paymentProvider(extra).notifier)
+              .preparePasaje(
+                pasajeroId: pasajeroId,
+                pasajeroCuenta: pasajeroCuenta,
+              );
+          if (!mounted) return;
+          if (!prepareResp.continuarFlujo) {
+            notifSvc.showError(prepareResp.mensaje);
+            return;
+          }
+          notifSvc.showSuccess(
+            'Se ha enviado un código OTP a tu celular. Revísalo y escríbelo aquí.',
+          );
 
-                          print("--- ENVIANDO PAGO TAXI ---");
-                          // --- FIN NUEVO ---
-
-                          await Future.delayed(
-                            const Duration(milliseconds: 500),
-                          );
-
-                          final PaymentStatus resultStatus;
-                          if (_simulateSuccess) {
-                            resultStatus = PaymentStatus.success;
-                          } else {
-                            resultStatus = PaymentStatus.rejected;
-                          }
-
-                          setState(() {
-                            _simulateSuccess = !_simulateSuccess;
-                          });
-
-                          Navigator.of(dialogContext).pop();
-
-                          Navigator.of(context).pushNamed(
-                            '/payment_status',
-                            arguments: resultStatus,
-                          );
-
-                          // --- NUEVO: GUARDAR EN HISTORIAL ---
-                          if (resultStatus == PaymentStatus.success) {
-                            try {
-                              final prefs = await SharedPreferences.getInstance();
-                              final List<String> historialJson =
-                                  prefs.getStringList('historial') ?? [];
-                              final String timestamp =
-                                  DateTime.now().toIso8601String();
-
-                              // Guardamos como tipo 'taxi'
-                              final List<String> nuevosItemsJson =
-                                  _pasajesSeleccionados.map((pasaje) {
-                                final Map<String, dynamic> transaccion = {
-                                  'type': 'taxi', // <--- TIPO TAXI
-                                  'timestamp': timestamp,
-                                  'nombre': pasaje.nombre, // Dirá "Pasaje Taxi"
-                                  'precio': pasaje.precio,
-                                };
-                                return json.encode(transaccion);
-                              }).toList();
-
-                              historialJson.addAll(nuevosItemsJson);
-                              await prefs.setStringList(
-                                  'historial', historialJson);
-                              print("Historial Taxi guardado!");
-                              
-                            } catch (e) {
-                              print("Error guardando historial: $e");
-                            }
-
-                            // Limpiar
-                            setState(() {
-                              _pasajesSeleccionados.clear();
-                              _montoController.clear();
-                            });
-                          }
-                          // --- FIN NUEVO ---
-                        },
-                        isLoading: _isLoading,
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (dialogContext) {
+              return PaymentConfirmationDialog(
+                pasajes: paymentState.selectedPasajes,
+                total: totalAPagar,
+                extra: extra,
+                onConfirm: (otp) async {
+                  try {
+                    final registerResp = await ref
+                        .read(paymentProvider(extra).notifier)
+                        .registerPasaje(
+                          codigoOtp: otp,
+                          pasajeroId: pasajeroId,
+                          pasajeroCuenta: pasajeroCuenta,
+                        );
+                    Navigator.of(dialogContext).pop();
+                    if (registerResp.continuarFlujo) {
+                      notifSvc.showSuccess('Pago ejecutado correctamente');
+                      _montoController.clear();
+                      context.go(
+                        AppPaths.paymentStatus,
+                        extra: PaymentStatus.success,
                       );
-                    },
-                  );
-                }
-              : null,
-          style: ElevatedButton.styleFrom(
-            shape: const CircleBorder(),
-            padding: const EdgeInsets.all(24),
-            backgroundColor: hasItems
-                ? const Color.fromARGB(255, 84, 209, 190)
-                : Colors.grey[400],
-            disabledBackgroundColor: Colors.grey[300],
-            disabledForegroundColor: Colors.grey[500],
-          ),
-          child: const Icon(Icons.attach_money, size: 35),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'ENVIAR',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: hasItems ? AppColors.primaryGreen : Colors.grey,
-          ),
-        ),
-      ],
+                    } else {
+                      final msg = registerResp.mensaje;
+                      if (msg.contains('http') &&
+                          (msg.endsWith('.png') ||
+                              msg.endsWith('.jpg') ||
+                              msg.endsWith('.jpeg'))) {
+                        showDialog(
+                          context: context,
+                          builder: (_) => Dialog(child: Image.network(msg)),
+                        );
+                      } else {
+                        notifSvc.showError(
+                          msg.isNotEmpty
+                              ? msg
+                              : 'Error en confirmación del pago',
+                        );
+                      }
+                    }
+                  } catch (e) {
+                    notifSvc.showError(e.toString());
+                  }
+                },
+              );
+            },
+          );
+        } catch (e) {
+          final notifSvc = ref.read(notificationServiceProvider);
+          notifSvc.showError(e.toString());
+        }
+      },
+      tooltip: hasItems ? null : (_montoError ?? 'Ingrese un monto válido'),
     );
   }
 
-  // ... (El resto de _buildSummaryCard y _buildSummaryItem queda igual)
   Widget _buildSummaryCard(BuildContext context) {
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    if (extra == null) return const SizedBox.shrink();
+    final paymentState = ref.watch(paymentProvider(extra));
     Map<String, int> pasajeCounts = {};
-    for (var pasaje in _pasajesSeleccionados) {
+    for (var pasaje in paymentState.selectedPasajes) {
       pasajeCounts[pasaje.nombre] = (pasajeCounts[pasaje.nombre] ?? 0) + 1;
     }
 
     List<Widget> itemsWidget = pasajeCounts.entries.map((entry) {
       String nombre = entry.key;
       int cantidad = entry.value;
-      double precioUnitario = _pasajesSeleccionados
+      double precioUnitario = paymentState.selectedPasajes
           .firstWhere((p) => p.nombre == nombre)
           .precio;
       double subtotal = cantidad * precioUnitario;
@@ -402,17 +322,16 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
       return _buildSummaryItem(
         context,
         nombre,
-        '$cantidad carrera', // Singular para taxi usualmente
+        '$cantidad carrera', 
         subtotal,
         () {
           setState(() {
-            _pasajesSeleccionados.clear();
+            ref.read(paymentProvider(extra).notifier).clearPasajes();
             _montoController.clear();
           });
         },
       );
     }).toList();
-
     return Container(
       padding: const EdgeInsets.only(left: 24, right: 24, top: 20, bottom: 20),
       decoration: const BoxDecoration(
@@ -440,7 +359,7 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          if (_pasajesSeleccionados.isEmpty)
+          if (paymentState.selectedPasajes.isEmpty)
             const Text(
               'Ingrese un monto para comenzar...',
               textAlign: TextAlign.center,

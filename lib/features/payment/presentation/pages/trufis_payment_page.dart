@@ -1,20 +1,15 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:sueltito/core/config/app_theme.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
-import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
+import 'package:sueltito/features/payment/presentation/widgets/send_button.dart';
+import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
+import 'package:sueltito/core/services/notification_service.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
-import 'package:sueltito/core/network/api_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
-import 'package:sueltito/features/payment/infra/datasources/payment_remote_ds.dart';
-import 'package:sueltito/features/payment/infra/repositories/payment_repository_impl.dart';
-import 'package:sueltito/features/payment/domain/usecases/prepare_pasaje_usecase.dart';
-import 'package:sueltito/features/payment/domain/usecases/register_pasaje_usecase.dart';
-import 'package:sueltito/features/payment/domain/entities/pasaje_prepare_request.dart';
+import 'package:sueltito/features/payment/presentation/providers/payment_provider.dart';
 import 'package:sueltito/core/constants/pasaje_constants.dart';
 
 class TrufiPaymentPage extends ConsumerStatefulWidget {
@@ -25,65 +20,60 @@ class TrufiPaymentPage extends ConsumerStatefulWidget {
 }
 
 class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
-  Map<String, dynamic>? _conductorData;
-  String? _conductorTipoTransporte;
+  List<PasajeInfo> get _trufiOptions {
+    final state = GoRouterState.of(context);
+    final extra = state.extra as Map<String, dynamic>?;
+    return PasajeConstants.trufiOptions(
+      preferencial: extra == null
+          ? false
+          : ref.watch(paymentProvider(extra)).isPreferencial,
+    );
+  }
 
-  bool _isPreferencial = false;
-  bool _isLoading = false;
-  final List<Pasaje> _pasajesSeleccionados = [];
-  bool _simulateSuccess = true;
-
-  List<PasajeInfo> get _trufiOptions =>
-      PasajeConstants.trufiOptions(preferencial: _isPreferencial);
   PasajeInfo get precioZonal => _trufiOptions[0];
   PasajeInfo get precioCorto => _trufiOptions[1];
   PasajeInfo get precioLargo => _trufiOptions[2];
   PasajeInfo get precioExtraLargo => _trufiOptions[3];
 
-  double get totalAPagar =>
-      _pasajesSeleccionados.fold(0.0, (sum, item) => sum + item.precio);
+  double get totalAPagar {
+    final state = GoRouterState.of(context);
+    final extra = state.extra as Map<String, dynamic>?;
+    return extra == null ? 0.0 : ref.watch(paymentProvider(extra)).totalAPagar;
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    if (_conductorData == null) {
-      final state = GoRouterState.of(context);
-      final extra = state.extra;
-      if (extra != null && extra is Map<String, dynamic>) {
-        setState(() {
-          _conductorData = extra;
-          _conductorTipoTransporte = extra['servicio']?['tipo_transporte']
-              ?.toString();
-        });
-      } else {
-        print("Error: TrufiPaymentPage se abrió sin datos del conductor.");
-      }
-    }
   }
-  // --- FIN NUEVO ---
 
   void _addPasaje(String nombre, double precio, String codigo) {
-    setState(() {
-      _pasajesSeleccionados.add(
-        Pasaje(nombre: nombre, precio: precio, codigo: codigo),
-      );
-    });
+    final state = GoRouterState.of(context);
+    final extra = state.extra as Map<String, dynamic>?;
+    if (extra == null) return;
+    ref
+        .read(paymentProvider(extra).notifier)
+        .addPasaje(Pasaje(nombre: nombre, precio: precio, codigo: codigo));
   }
 
   void _removePasaje(int index) {
-    setState(() {
-      _pasajesSeleccionados.removeAt(index);
-    });
+    final state = GoRouterState.of(context);
+    final extra = state.extra as Map<String, dynamic>?;
+    if (extra == null) return;
+    ref.read(paymentProvider(extra).notifier).removePasajeAt(index);
   }
 
   @override
   Widget build(BuildContext context) {
-    // --- NUEVO: Muestra 'cargando' hasta que los datos del NFC lleguen ---
-    if (_conductorData == null) {
+    final state = GoRouterState.of(context);
+    final extra = state.extra as Map<String, dynamic>?;
+    if (extra == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    // --- FIN NUEVO ---
+    final paymentState = ref.watch(paymentProvider(extra));
+    if (paymentState.conductorData == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
       appBar: _buildAppBar(context),
@@ -96,9 +86,9 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // --- MODIFICADO: Le pasamos los datos del conductor ---
-                  _buildDriverInfoCard(_conductorData!),
-                  // --- FIN MODIFICADO ---
+                  _buildDriverInfoCard(
+                    ref.watch(paymentProvider(extra)).conductorData!,
+                  ),
                   const SizedBox(height: 24),
                   _buildFareSelection(context),
                   const SizedBox(height: 24),
@@ -124,7 +114,7 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
       ),
       centerTitle: true,
       title: Text(
-        'Bienvenido al Trufi\nFabricio', // Título actualizado (de tu merge)
+        'Bienvenido al Trufi\nFabricio',
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
           color: AppColors.primaryGreen,
@@ -134,14 +124,11 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
     );
   }
 
-  // --- MODIFICADO: Tarjeta de conductor dinámica (fusionada) ---
   Widget _buildDriverInfoCard(Map<String, dynamic> driverData) {
-    // 1. Extraemos los bloques
     final propietario =
         driverData['propietario'] as Map<String, dynamic>? ?? {};
     final servicio = driverData['servicio'] as Map<String, dynamic>? ?? {};
 
-    // 2. Extraemos los datos (usando el JSON que ya conocemos)
     final String nombre =
         propietario['nombre'] as String? ?? 'Conductor no encontrado';
     final String placa = servicio['identificador'] as String? ?? 'S/N';
@@ -161,7 +148,7 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Placa: $placa', // Dato dinámico
+                'Placa: $placa', 
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
@@ -169,16 +156,15 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
               ),
               const SizedBox(height: 6),
               Text(
-                nombre, // Dato dinámico
+                nombre, 
                 style: TextStyle(fontSize: 14, color: Colors.grey[800]),
               ),
               Text(
-                nombreRuta, // Dato dinámico
+                nombreRuta, 
                 style: TextStyle(fontSize: 14, color: Colors.grey[700]),
               ),
             ],
           ),
-          // --- Icono de auto (de tu merge) ---
           const Icon(
             Icons.directions_car,
             size: 40,
@@ -188,25 +174,35 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
       ),
     );
   }
-  // --- FIN MODIFICADO ---
 
-  // --- MODIFICADO: Selección de 4 tarifas (de tu merge) ---
   Widget _buildFareSelection(BuildContext context) {
-    bool hasZonal = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Zonal');
-    bool hasLargo = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Largo');
-    bool hasCorto = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Corto');
-    bool hasExtraLargo = _pasajesSeleccionados.any(
+    final state = GoRouterState.of(context);
+    final extra = state.extra as Map<String, dynamic>?;
+    if (extra == null) return const SizedBox();
+    final paymentState = ref.watch(paymentProvider(extra));
+    bool hasZonal = paymentState.selectedPasajes.any(
+      (p) => p.nombre == 'Tramo Zonal',
+    );
+    bool hasLargo = paymentState.selectedPasajes.any(
+      (p) => p.nombre == 'Tramo Largo',
+    );
+    bool hasCorto = paymentState.selectedPasajes.any(
+      (p) => p.nombre == 'Tramo Corto',
+    );
+    bool hasExtraLargo = paymentState.selectedPasajes.any(
       (p) => p.nombre == 'Tramo Extra Largo',
     );
 
-    // If this is a Trufi Zonal (tipo_transporte '04') show only Zonal option
-    if (_conductorTipoTransporte == '04') {
-      final zonalInfo = PasajeConstants.PAP_PASAJES['000019']!; // daytime
-      final zonalInfoN = PasajeConstants.PAP_PASAJES['000020']!; // night
-      final selectedPrice = _isPreferencial
+    final conductorTipoTransporte = paymentState
+        .conductorData?['servicio']?['tipo_transporte']
+        ?.toString();
+    if (conductorTipoTransporte == '04') {
+      final zonalInfo = PasajeConstants.PAP_PASAJES['000019']!;
+      final zonalInfoN = PasajeConstants.PAP_PASAJES['000020']!;
+      final selectedPrice = paymentState.isPreferencial
           ? zonalInfoN.tarifa
           : zonalInfo.tarifa;
-      final bool hasZonalOnly = _pasajesSeleccionados.any(
+      final bool hasZonalOnly = paymentState.selectedPasajes.any(
         (p) => p.codigo == zonalInfo.codigo || p.codigo == zonalInfoN.codigo,
       );
 
@@ -227,11 +223,11 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   Switch(
-                    value: _isPreferencial,
+                    value: paymentState.isPreferencial,
                     onChanged: (value) {
-                      setState(() {
-                        _isPreferencial = value;
-                      });
+                      ref
+                          .read(paymentProvider(extra).notifier)
+                          .setPreferencial(value);
                     },
                     activeThumbColor: AppColors.primaryGreen,
                   ),
@@ -250,7 +246,9 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
                   () => _addPasaje(
                     'Tramo Zonal',
                     selectedPrice,
-                    _isPreferencial ? zonalInfoN.codigo : zonalInfo.codigo,
+                    paymentState.isPreferencial
+                        ? zonalInfoN.codigo
+                        : zonalInfo.codigo,
                   ),
                   isSelected: hasZonalOnly,
                 ),
@@ -278,11 +276,11 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 Switch(
-                  value: _isPreferencial,
+                  value: paymentState.isPreferencial,
                   onChanged: (value) {
-                    setState(() {
-                      _isPreferencial = value;
-                    });
+                    ref
+                        .read(paymentProvider(extra).notifier)
+                        .setPreferencial(value);
                   },
                   activeThumbColor: AppColors.primaryGreen,
                 ),
@@ -357,7 +355,6 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
       ],
     );
   }
-  // --- FIN MODIFICADO ---
 
   Widget _buildFareButton(
     BuildContext context,
@@ -366,7 +363,6 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
     VoidCallback onPressed, {
     required bool isSelected,
   }) {
-    // --- Estilo de botón (de tu merge) ---
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
@@ -391,224 +387,105 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
     );
   }
 
-  // --- MODIFICADO: Botón de pago con lógica de guardado ---
   Widget _buildPayButton(BuildContext context) {
-    bool hasItems = _pasajesSeleccionados.isNotEmpty;
+    final state = GoRouterState.of(context);
+    final extra = state.extra as Map<String, dynamic>?;
+    if (extra == null) return const SizedBox();
+    final paymentState = ref.watch(paymentProvider(extra));
+    bool hasItems = paymentState.selectedPasajes.isNotEmpty;
 
-    return Column(
-      children: [
-        ElevatedButton(
-      onPressed: hasItems && !_isLoading
-        ? () {
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (dialogContext) {
-                      return PaymentConfirmationDialog(
-                        pasajes: _pasajesSeleccionados,
-                        total: totalAPagar,
-            onConfirm: () async {
-              setState(() { _isLoading = true; });
-                          // --- NUEVO: PREPARAMOS LOS DATOS ANTES DE PAGAR ---
-                          // Using domain detalle mapping instead of raw pasajesJSON
-
-                          // We will build a domain request and use the use case below; no raw payload needed.
-
-                          try {
-                            final apiClient = ApiClient();
-                            final remoteDS = PaymentRemoteDataSourceImpl(
-                              apiClient: apiClient,
-                            );
-                            final repository = PaymentRepositoryImpl(
-                              remoteDataSource: remoteDS,
-                            );
-                            final usecase = PreparePasajeUseCase(repository);
-              final propietario = _conductorData!['propietario'] as Map<String, dynamic>? ?? {};
-                            final servicio =
-                                _conductorData!['servicio']
-                                    as Map<String, dynamic>? ??
-                                {};
-              final tag = _conductorData!['tag'] as Map<String, dynamic>? ?? {};
-                            // pasajero and cuenta read from auth
-                            // Note: use currentUserProvider or auth provider to read logged user
-                            final currentUser = ref.read(currentUserProvider);
-                            final pasajeroId = currentUser?.id ?? '';
-                            final pasajeroCuenta = currentUser?.nroCuenta ?? '';
-                            // detalle will be created as domain PagoDetalleEntities below for use case
-                            final tramite = TramiteEntity(
-                              tramiteId: '',
-                              numeroAutorizacion: '',
-                              codigoOtp: '',
-                            );
-                            final servicioEntity = ServicioEntity(
-                              tipo:
-                                  servicio['tipo'] ??
-                                  servicio['tipo_transporte'] ??
-                                  '02',
-                              nombre: servicio['nombre'] ?? '',
-                              tipoIdentificador:
-                                  servicio['tipo_identificador'] ?? '',
-                              identificador: servicio['identificador'] ?? '',
-                              codigoEntidad:
-                                  servicio['entidad'] ??
-                                  servicio['codigo_entidad'] ??
-                                  '',
-                            );
-                            final tagEntity = TagEntity(
-                              identificador:
-                                  tag['tag_uid'] ?? tag['identificador'] ?? '',
-                            );
-                            final usuarioEntity = UsuarioPagoEntity(
-                              pasajeroId: pasajeroId,
-                              conductorId: propietario['identificador'] ?? '',
-                              pasajeroCuenta: pasajeroCuenta,
-                              conductorCuenta: propietario['cuenta'] ?? '',
-                            );
-                            final pagoEntity = PagoEntity(
-                              tipoTransporte:
-                                  servicio['tipo_transporte'] ??
-                                  servicio['tipo'] ??
-                                  '02',
-                              formaPago: '01',
-                              montoTotal: totalAPagar,
-                              detalle: _pasajesSeleccionados
-                                  .map(
-                                    (p) => PagoDetalleEntity(
-                                      tipoPago: p.codigo ?? '',
-                                    ),
-                                  )
-                                  .toList(),
-                            );
-                            final requestDomain = PasajePrepareRequest(
-                              tramite: tramite,
-                              servicio: servicioEntity,
-                              tag: tagEntity,
-                              usuario: usuarioEntity,
-                              pago: pagoEntity,
-                              glosa: 'Pago Pasaje',
-                            );
-                            final response = await usecase(requestDomain);
-                            print(
-                              'Prepare response trufi: ${response.mensaje}',
-                            );
-                            if (response.continuarFlujo) {
-                              final registerUsecase = RegisterPasajeUseCase(repository);
-                              final tramiteFilled = TramiteEntity(tramiteId: response.data?.idTramite ?? '', numeroAutorizacion: response.data?.numeroAutorizacion ?? '', codigoOtp: '');
-                              final requestConfirm = PasajePrepareRequest(tramite: tramiteFilled, servicio: servicioEntity, tag: tagEntity, usuario: usuarioEntity, pago: pagoEntity, glosa: 'Pago Pasaje');
-                              final confirmResp = await registerUsecase(requestConfirm);
-                              if (confirmResp.continuarFlujo) {
-                                final msg = confirmResp.data?.numeroAutorizacion ?? confirmResp.mensaje;
-                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirmado: $msg')));
-                              }
-                            }
-                          } catch (e) {
-                            print('Error preparando pasaje trufi: $e');
-                          } finally {
-                            if (mounted) setState(() { _isLoading = false; });
-                          }
-                          // --- FIN NUEVO ---
-                          final PaymentStatus resultStatus;
-                          if (_simulateSuccess) {
-                              resultStatus = PaymentStatus.success;
-                            } else {
-                              resultStatus = PaymentStatus.rejected;
-                            }
-
-                          setState(() {
-                            _simulateSuccess = !_simulateSuccess;
-                          });
-
-                          // 3. Cerrar el diálogo
-                          dialogContext.pop();
-
-                          // 4. Navegar con GoRouter
-                          context.go(
-                            AppPaths.paymentStatus,
-                            extra: resultStatus,
-                          );
-                          // (Fin de tu simulación de pago)
-
-                          // --- NUEVO: GUARDAMOS EN EL HISTORIAL SI EL PAGO FUE EXITOSO ---
-                          if (resultStatus == PaymentStatus.success) {
-                            try {
-                              final prefs =
-                                  await SharedPreferences.getInstance();
-                              final List<String> historialJson =
-                                  prefs.getStringList('historial') ?? [];
-                              final String timestamp = DateTime.now()
-                                  .toIso8601String();
-
-                              final List<String> nuevosItemsJson =
-                                  _pasajesSeleccionados.map((pasaje) {
-                                    final Map<String, dynamic> transaccion = {
-                                      // ¡¡LA CLAVE ESTÁ AQUÍ!!
-                                      'type':
-                                          'trufi', // ¡TIPO ESPECÍFICO DE TRUFI!
-                                      'timestamp': timestamp,
-                                      'nombre': pasaje.nombre,
-                                      'precio': pasaje.precio,
-                                    };
-                                    return json.encode(transaccion);
-                                  }).toList();
-
-                              historialJson.addAll(nuevosItemsJson);
-                              await prefs.setStringList(
-                                'historial',
-                                historialJson,
-                              );
-                              print("Historial de Trufi guardado!");
-                            } catch (e) {
-                              print("Error al guardar historial: $e");
-                            }
-                            // --- FIN NUEVO ---
-
-                            setState(() {
-                              _pasajesSeleccionados.clear();
-                            });
-                          }
-                        },
-                        isLoading: _isLoading,
+    return SendButton(
+      isEnabled: hasItems,
+      isLoading: paymentState.isLoading,
+      onPressed: () async {
+        final currentUser = ref.read(currentUserProvider);
+        final pasajeroId = currentUser?.id ?? '';
+        final pasajeroCuenta = currentUser?.nroCuenta ?? '';
+        final notifSvc = ref.read(notificationServiceProvider);
+        try {
+          final prepareResp = await ref
+              .read(paymentProvider(extra).notifier)
+              .preparePasaje(
+                pasajeroId: pasajeroId,
+                pasajeroCuenta: pasajeroCuenta,
+              );
+          if (!prepareResp.continuarFlujo) {
+            if (!mounted) return;
+            notifSvc.showError(prepareResp.mensaje);
+            return;
+          }
+          notifSvc.showSuccess(
+            'Se ha enviado un código OTP a tu celular. Revísalo y escríbelo aquí.',
+          );
+          if (!mounted) return;
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (dialogContext) {
+              return PaymentConfirmationDialog(
+                pasajes: paymentState.selectedPasajes,
+                total: totalAPagar,
+                extra: extra,
+                onConfirm: (otp) async {
+                  try {
+                    final regResp = await ref
+                        .read(paymentProvider(extra).notifier)
+                        .registerPasaje(
+                          codigoOtp: otp,
+                          pasajeroId: pasajeroId,
+                          pasajeroCuenta: pasajeroCuenta,
+                        );
+                    if (!mounted) return;
+                    Navigator.of(dialogContext).pop();
+                    if (regResp.continuarFlujo) {
+                      notifSvc.showSuccess('Pago ejecutado correctamente');
+                      context.go(
+                        AppPaths.paymentStatus,
+                        extra: PaymentStatus.success,
                       );
-                    },
-                  );
-                }
-              : null,
-          style: ElevatedButton.styleFrom(
-            // ... (tu estilo de botón no cambia)
-            shape: const CircleBorder(),
-            padding: const EdgeInsets.all(24),
-            backgroundColor: hasItems
-                ? const Color.fromARGB(255, 84, 209, 190)
-                : Colors.grey[400],
-            disabledBackgroundColor: Colors.grey[300],
-            disabledForegroundColor: Colors.grey[500],
-          ),
-          child: const Icon(Icons.attach_money, size: 35),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'ENVIAR',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: hasItems ? AppColors.primaryGreen : Colors.grey,
-          ),
-        ),
-      ],
+                    } else {
+                      final msg = regResp.mensaje;
+                      if (msg.contains('http') &&
+                          (msg.endsWith('.png') ||
+                              msg.endsWith('.jpg') ||
+                              msg.endsWith('.jpeg'))) {
+                        showDialog(
+                          context: context,
+                          builder: (_) => Dialog(child: Image.network(msg)),
+                        );
+                      } else {
+                        notifSvc.showError(msg);
+                      }
+                    }
+                  } catch (e) {
+                    notifSvc.showError(e.toString());
+                  }
+                },
+              );
+            },
+          );
+        } catch (e) {
+          notifSvc.showError(e.toString());
+        }
+      },
+      tooltip: hasItems ? null : 'Añade un tramo para pagar',
     );
   }
-  // --- FIN MODIFICADO ---
 
   Widget _buildSummaryCard(BuildContext context) {
-    // ... (Tu _buildSummaryCard y _buildSummaryItem no necesitan cambios)
+    final state = GoRouterState.of(context);
+    final extra = state.extra as Map<String, dynamic>?;
+    if (extra == null) return const SizedBox();
+    final paymentState = ref.watch(paymentProvider(extra));
     Map<String, int> pasajeCounts = {};
-    for (var pasaje in _pasajesSeleccionados) {
+    for (var pasaje in paymentState.selectedPasajes) {
       pasajeCounts[pasaje.nombre] = (pasajeCounts[pasaje.nombre] ?? 0) + 1;
     }
 
     List<Widget> itemsWidget = pasajeCounts.entries.map((entry) {
       String nombre = entry.key;
       int cantidad = entry.value;
-      double precioUnitario = _pasajesSeleccionados
+      double precioUnitario = paymentState.selectedPasajes
           .firstWhere((p) => p.nombre == nombre)
           .precio;
       double subtotal = cantidad * precioUnitario;
@@ -619,7 +496,7 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
         '$cantidad persona${cantidad > 1 ? 's' : ''}',
         subtotal,
         () {
-          int indexToRemove = _pasajesSeleccionados.indexWhere(
+          int indexToRemove = paymentState.selectedPasajes.indexWhere(
             (p) => p.nombre == nombre,
           );
           if (indexToRemove != -1) {
@@ -656,7 +533,7 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          if (_pasajesSeleccionados.isEmpty)
+          if (paymentState.selectedPasajes.isEmpty)
             const Text(
               'Añade un tramo para comenzar...',
               textAlign: TextAlign.center,
@@ -693,7 +570,6 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
     double subtotal,
     VoidCallback onQuitar,
   ) {
-    // ... (Esta función no cambia)
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(

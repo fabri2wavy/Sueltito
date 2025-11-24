@@ -1,21 +1,16 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
-import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
-import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
 import 'package:sueltito/core/constants/pasaje_constants.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // <-- nuevo
-import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart'; // <-- nuevo
-import 'package:sueltito/core/network/api_client.dart';
-import 'package:sueltito/features/payment/infra/datasources/payment_remote_ds.dart';
-import 'package:sueltito/features/payment/infra/repositories/payment_repository_impl.dart';
-import 'package:sueltito/features/payment/domain/usecases/prepare_pasaje_usecase.dart';
-import 'package:sueltito/features/payment/domain/usecases/register_pasaje_usecase.dart';
-import 'package:sueltito/features/payment/domain/entities/pasaje_prepare_request.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sueltito/features/payment/presentation/providers/payment_provider.dart';
+import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
+import 'package:sueltito/features/payment/presentation/widgets/send_button.dart';
+import 'package:sueltito/features/payment/domain/enums/payment_status_enum.dart';
+import 'package:sueltito/core/services/notification_service.dart';
 
 class MinibusPaymentPage extends ConsumerStatefulWidget {
   const MinibusPaymentPage({super.key});
@@ -25,72 +20,60 @@ class MinibusPaymentPage extends ConsumerStatefulWidget {
 }
 
 class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
-  Map<String, dynamic>? _conductorData;
-  bool _isPreferencial = false;
-  final List<Pasaje> _pasajesSeleccionados = [];
-  bool _isLoading = false;
-  bool _simulateSuccess = true;
-
   PasajeInfo get _minibusCorto => PasajeConstants.PAP_PASAJES['000001']!;
   PasajeInfo get _minibusLargo => PasajeConstants.PAP_PASAJES['000002']!;
   PasajeInfo get _minibusCortoPref => PasajeConstants.PAP_PASAJES['000005']!;
   PasajeInfo get _minibusLargoPref => PasajeConstants.PAP_PASAJES['000006']!;
 
-  double get precioActualCorto =>
-      _isPreferencial ? _minibusCortoPref.tarifa : _minibusCorto.tarifa;
-  double get precioActualLargo =>
-      _isPreferencial ? _minibusLargoPref.tarifa : _minibusLargo.tarifa;
-
-  double get totalAPagar =>
-      _pasajesSeleccionados.fold(0.0, (sum, item) => sum + item.precio);
-
-  // --- NUEVO: Lógica para recibir los datos del NFC ---
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    if (_conductorData == null) {
-      final state = GoRouterState.of(context);
-      final extra = state.extra;
-      if (extra != null && extra is Map<String, dynamic>) {
-        setState(() {
-          _conductorData = extra;
-        });
-      } else {
-        print("Error: MinibusPaymentPage se abrió sin datos del conductor.");
-      }
-    }
+  double get precioActualCorto {
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    final isPref = extra == null
+        ? false
+        : ref.watch(paymentProvider(extra)).isPreferencial;
+    return isPref ? _minibusCortoPref.tarifa : _minibusCorto.tarifa;
   }
-  // --- FIN NUEVO ---
+
+  double get precioActualLargo {
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    final isPref = extra == null
+        ? false
+        : ref.watch(paymentProvider(extra)).isPreferencial;
+    return isPref ? _minibusLargoPref.tarifa : _minibusLargo.tarifa;
+  }
+
+  double get totalAPagar {
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    return extra == null ? 0.0 : ref.watch(paymentProvider(extra)).totalAPagar;
+  }
+
 
   void _addPasaje(String nombre, double precio, String codigo) {
-    setState(() {
-      _pasajesSeleccionados.add(
-        Pasaje(nombre: nombre, precio: precio, codigo: codigo),
-      );
-    });
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    if (extra == null) return;
+    ref
+        .read(paymentProvider(extra).notifier)
+        .addPasaje(Pasaje(nombre: nombre, precio: precio, codigo: codigo));
   }
 
   void _removePasaje(int index) {
-    setState(() {
-      _pasajesSeleccionados.removeAt(index);
-    });
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    if (extra == null) return;
+    ref.read(paymentProvider(extra).notifier).removePasajeAt(index);
   }
 
   @override
   Widget build(BuildContext context) {
-    // --- NUEVO: Muestra un 'cargando' hasta que los datos del NFC lleguen ---
-    if (_conductorData == null) {
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    if (extra == null) return const SizedBox.shrink();
+    final paymentState = ref.watch(paymentProvider(extra));
+    if (paymentState.conductorData == null) {
       return const Scaffold(
         body: Center(
-          // Muestra un indicador de carga
           child: CircularProgressIndicator(),
         ),
       );
     }
-    // --- FIN NUEVO ---
 
-    // El resto de la UI se construye normal una vez que _conductorData existe
     return Scaffold(
       appBar: _buildAppBar(context),
       body: Column(
@@ -102,9 +85,7 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // --- pasamos los datos del conductor ---
-                  _buildDriverInfoCard(_conductorData!),
-                  // ------
+                  _buildDriverInfoCard(paymentState.conductorData!),
                   const SizedBox(height: 24),
                   _buildFareSelection(context),
                   const SizedBox(height: 24),
@@ -122,7 +103,6 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
-      // ...AppBar
       backgroundColor: Colors.transparent,
       elevation: 0,
       leading: IconButton(
@@ -141,15 +121,11 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
     );
   }
 
-  // --- MODIFICADO: Esta función ahora es dinámica y recibe el JSON ---
   Widget _buildDriverInfoCard(Map<String, dynamic> driverData) {
-    // 1. Extraemos los bloques (con '?? {}' para evitar errores si no existen)
     final propietario =
         driverData['propietario'] as Map<String, dynamic>? ?? {};
     final servicio = driverData['servicio'] as Map<String, dynamic>? ?? {};
 
-    // 2. Extraemos los datos que queremos mostrar (como hicimos con el Trufi)
-    //    El usuario dijo que el JSON no cambia, así que usamos la misma estructura.
     final String nombre =
         propietario['nombre'] as String? ?? 'Conductor no encontrado';
     final String placa = servicio['identificador'] as String? ?? 'S/N';
@@ -169,7 +145,6 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                // --- MODIFICADO: Mostramos la PLACA ---
                 'Placa: $placa',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
@@ -178,12 +153,10 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
               ),
               const SizedBox(height: 6),
               Text(
-                // --- MODIFICADO: Mostramos el NOMBRE ---
                 nombre,
                 style: TextStyle(fontSize: 14, color: Colors.grey[800]),
               ),
               Text(
-                // --- NUEVO: Mostramos la RUTA ---
                 nombreRuta,
                 style: TextStyle(fontSize: 14, color: Colors.grey[700]),
               ),
@@ -198,12 +171,17 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
       ),
     );
   }
-  // --- FIN MODIFICADO ---
 
   Widget _buildFareSelection(BuildContext context) {
-    // ... (Tu lógica de _buildFareSelection y _buildFareButton no cambia)
-    bool hasCorto = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Corto');
-    bool hasLargo = _pasajesSeleccionados.any((p) => p.nombre == 'Tramo Largo');
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    if (extra == null) return const SizedBox.shrink();
+    final paymentState = ref.watch(paymentProvider(extra));
+    bool hasCorto = paymentState.selectedPasajes.any(
+      (p) => p.nombre == 'Tramo Corto',
+    );
+    bool hasLargo = paymentState.selectedPasajes.any(
+      (p) => p.nombre == 'Tramo Largo',
+    );
 
     return Column(
       children: [
@@ -221,11 +199,11 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 Switch(
-                  value: _isPreferencial,
+                  value: paymentState.isPreferencial,
                   onChanged: (value) {
-                    setState(() {
-                      _isPreferencial = value;
-                    });
+                    ref
+                        .read(paymentProvider(extra).notifier)
+                        .setPreferencial(value);
                   },
                   activeColor: AppColors.primaryGreen,
                 ),
@@ -244,7 +222,7 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
                 () => _addPasaje(
                   'Tramo Corto',
                   precioActualCorto,
-                  _isPreferencial
+                  paymentState.isPreferencial
                       ? _minibusCortoPref.codigo
                       : _minibusCorto.codigo,
                 ),
@@ -260,7 +238,7 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
                 () => _addPasaje(
                   'Tramo Largo',
                   precioActualLargo,
-                  _isPreferencial
+                  paymentState.isPreferencial
                       ? _minibusLargoPref.codigo
                       : _minibusLargo.codigo,
                 ),
@@ -280,7 +258,6 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
     VoidCallback onPressed, {
     required bool isSelected,
   }) {
-    // ...
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
@@ -306,214 +283,117 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
   }
 
   Widget _buildPayButton(BuildContext context) {
-    bool hasItems = _pasajesSeleccionados.isNotEmpty;
-    // usamos ref para leer el usuario logueado
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    if (extra == null) return const SizedBox.shrink();
+    final paymentState = ref.watch(paymentProvider(extra));
+    bool hasItems =
+        paymentState.selectedPasajes.isNotEmpty && !paymentState.isLoading;
     final currentUser = ref.watch(
       currentUserProvider,
-    ); // <-- usa currentUserProvider
+    ); 
 
-    return Column(
-      children: [
-        ElevatedButton(
-      onPressed: hasItems && !_isLoading
-              ? () {
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (dialogContext) {
-                      return PaymentConfirmationDialog(
-                        pasajes: _pasajesSeleccionados,
-                        total: totalAPagar,
-                        onConfirm: () async {
-                          setState(() { _isLoading = true; });
-                          // Datos del conductor sacados del NFC
-                          final propietario =
-                              _conductorData?['propietario']
-                                  as Map<String, dynamic>? ??
-                              {};
-                          final servicio =
-                              _conductorData?['servicio']
-                                  as Map<String, dynamic>? ??
-                              {};
-                          final tag =
-                              _conductorData?['tag'] as Map<String, dynamic>? ??
-                              {};
-
-                          // Datos del pasajero sacados del currentUser (ref)
-                          final pasajeroId = currentUser?.id ?? '';
-                          final pasajeroCuenta = currentUser?.celular?? '';
-
-                          // Detalle de pago (solo codigo tipo_pago)
-                          final List<Map<String, dynamic>> detalle =
-                              _pasajesSeleccionados
-                                  .map((p) => {'tipo_pago': p.codigo ?? ''})
-                                  .toList();
-
-                          // Monto total (confirmado desde UI)
-                          final double montoTotal = totalAPagar;
-
-                          // Armar JSON EXACTO como lo pediste
-                          // We build the domain request instead of a raw JSON payload, use the use case below.
-
-                          // Llamamos al UseCase para preparar el pasaje
-                          try {
-                            final apiClient = ApiClient();
-                            final remoteDS = PaymentRemoteDataSourceImpl(apiClient: apiClient);
-                            final repository = PaymentRepositoryImpl(remoteDataSource: remoteDS);
-                            final usecase = PreparePasajeUseCase(repository);
-
-                            // Build domain request
-                            final tramite = TramiteEntity(tramiteId: ' ', numeroAutorizacion: ' ', codigoOtp: ' ');
-                            final servicioEntity = ServicioEntity(
-                              tipo: servicio['tipo'] ?? servicio['tipo_transporte'] ?? '01',
-                              nombre: servicio['nombre'] ?? '',
-                              tipoIdentificador: servicio['tipo_identificador'] ?? '',
-                              identificador: servicio['identificador'] ?? '',
-                              codigoEntidad: servicio['entidad'] ?? servicio['codigo_entidad'] ?? '',
-                            );
-                            final tagEntity = TagEntity(identificador: tag['tag_uid'] ?? tag['identificador'] ?? '');
-                            final usuarioEntity = UsuarioPagoEntity(
-                              pasajeroId: pasajeroId,
-                              conductorId: propietario['identificador'] ?? '',
-                              pasajeroCuenta: pasajeroCuenta,
-                              conductorCuenta: propietario['cuenta'] ?? '',
-                            );
-                            final pagoEntity = PagoEntity(
-                              tipoTransporte: servicio['tipo_transporte'] ?? servicio['tipo'] ?? '01',
-                              formaPago: '01',
-                              montoTotal: montoTotal,
-                              detalle: detalle.map((d) => PagoDetalleEntity(tipoPago: d['tipo_pago'] ?? '')).toList(),
-                            );
-
-                            final requestDomain = PasajePrepareRequest(
-                              tramite: tramite,
-                              servicio: servicioEntity,
-                              tag: tagEntity,
-                              usuario: usuarioEntity,
-                              pago: pagoEntity,
-                              glosa: 'Pago Pasaje',
-                            );
-
-                            // Run use case
-                            final response = await usecase(requestDomain);
-                            print('Prepare response: ${response.mensaje}');
-                            if (response.continuarFlujo) {
-                              final registerUsecase = RegisterPasajeUseCase(repository);
-                              final tramiteFilled = TramiteEntity(tramiteId: response.data?.idTramite ?? '', numeroAutorizacion: response.data?.numeroAutorizacion ?? '', codigoOtp: '1234');
-                              final requestConfirm = PasajePrepareRequest(
-                                tramite: tramiteFilled,
-                                servicio: servicioEntity,
-                                tag: tagEntity,
-                                usuario: usuarioEntity,
-                                pago: pagoEntity,
-                                glosa: 'Pago Pasaje',
-                              );
-                              final confirmResp = await registerUsecase(requestConfirm);
-                              if (confirmResp.continuarFlujo) {
-                                final msg = confirmResp.data?.numeroAutorizacion ?? confirmResp.mensaje;
-                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirmado: $msg')));
-                              }
-                            }
-                          } catch (e) {
-                            print('Error preparando pasaje: $e');
-                            // Optionally show toast/dialog with error
-                          } finally {
-                            setState(() { _isLoading = false; });
-                          }
-
-                          // Simulación de envío + manejo de resultado (igual que antes)
-                          await Future.delayed(
-                            const Duration(milliseconds: 500),
-                          );
-                          final resultStatus = _simulateSuccess
-                              ? PaymentStatus.success
-                              : PaymentStatus.rejected;
-                          setState(() => _simulateSuccess = !_simulateSuccess);
-
-                          dialogContext.pop();
-                          context.go(
-                            AppPaths.paymentStatus,
-                            extra: resultStatus,
-                          );
-
-                          if (resultStatus == PaymentStatus.success) {
-                            try {
-                              final prefs =
-                                  await SharedPreferences.getInstance();
-                              final List<String> historialJson =
-                                  prefs.getStringList('historial') ?? [];
-                              final timestamp = DateTime.now()
-                                  .toIso8601String();
-
-                              final nuevosItemsJson = _pasajesSeleccionados.map(
-                                (pasaje) {
-                                  final Map<String, dynamic> transaccion = {
-                                    'type': 'minibus',
-                                    'timestamp': timestamp,
-                                    'nombre': pasaje.nombre,
-                                    'precio': pasaje.precio,
-                                  };
-                                  return json.encode(transaccion);
-                                },
-                              ).toList();
-
-                              historialJson.addAll(nuevosItemsJson);
-                              await prefs.setStringList(
-                                'historial',
-                                historialJson,
-                              );
-                            } catch (e) {
-                              print("Error al guardar historial: $e");
-                            }
-
-                            setState(() {
-                              _pasajesSeleccionados.clear();
-                            });
-                          }
-                        },
-                        isLoading: _isLoading,
-                      );
-                    },
-                  );
-                }
-              : null,
-          // ... (estilos no cambian)
-          style: ElevatedButton.styleFrom(
-            shape: const CircleBorder(),
-            padding: const EdgeInsets.all(24),
-            backgroundColor: hasItems
-                ? const Color.fromARGB(255, 84, 209, 190)
-                : Colors.grey[400],
-            disabledBackgroundColor: Colors.grey[300],
-            disabledForegroundColor: Colors.grey[500],
-          ),
-          child: const Icon(Icons.attach_money, size: 35),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'ENVIAR',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: hasItems ? AppColors.primaryGreen : Colors.grey,
-          ),
-        ),
-      ],
+    return SendButton(
+      isEnabled: hasItems,
+      isLoading: paymentState.isLoading,
+      onPressed: () async =>
+          _handlePayment(context, currentUser, paymentState, extra),
+      tooltip: hasItems ? null : 'Añade un tramo para pagar',
     );
   }
 
+  Future<void> _handlePayment(
+    BuildContext context,
+    dynamic currentUser,
+    PaymentState paymentState,
+    Map<String, dynamic> extra,
+  ) async {
+    final pasajeroId = currentUser?.id ?? '';
+    final pasajeroCuenta = currentUser?.celular ?? '';
+    final notifSvc = ref.read(notificationServiceProvider);
+    try {
+      final prepareResp = await ref
+          .read(paymentProvider(extra).notifier)
+          .preparePasaje(
+            pasajeroId: pasajeroId,
+            pasajeroCuenta: pasajeroCuenta,
+          );
+      if (!mounted) return;
+      if (!prepareResp.continuarFlujo) {
+        notifSvc.showError(prepareResp.mensaje);
+        return;
+      }
+      notifSvc.showSuccess(
+        'Se ha enviado un código OTP a tu celular. Revísalo y escríbelo aquí.',
+      );
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return PaymentConfirmationDialog(
+            pasajes: paymentState.selectedPasajes,
+            total: paymentState.totalAPagar,
+            extra: extra,
+            onConfirm: (otp) async {
+              try {
+                final registerResp = await ref
+                    .read(paymentProvider(extra).notifier)
+                    .registerPasaje(
+                      codigoOtp: otp,
+                      pasajeroId: pasajeroId,
+                      pasajeroCuenta: pasajeroCuenta,
+                    );
+                if (!mounted) return;
+                Navigator.of(dialogContext).pop();
+                if (registerResp.continuarFlujo) {
+                  notifSvc.showSuccess('Pago ejecutado correctamente');
+                  context.go(
+                    AppPaths.paymentStatus,
+                    extra: PaymentStatus.success,
+                  );
+                } else {
+                  final msg = registerResp.mensaje;
+                  if (msg.contains('http') &&
+                      (msg.endsWith('.png') ||
+                          msg.endsWith('.jpg') ||
+                          msg.endsWith('.jpeg'))) {
+                    showDialog(
+                      context: context,
+                      builder: (_) => Dialog(child: Image.network(msg)),
+                    );
+                  } else {
+                    notifSvc.showError(msg);
+                  }
+                }
+              } catch (e) {
+                notifSvc.showError(e.toString());
+              }
+            },
+          );
+        },
+      );
+    } catch (e) {
+      notifSvc.showError(e.toString());
+    }
+  }
+
   Widget _buildSummaryCard(BuildContext context) {
-    // ... (Tu _buildSummaryCard y _buildSummaryItem no necesitan cambios)
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    final paymentState = extra == null
+        ? null
+        : ref.watch(paymentProvider(extra));
     Map<String, int> pasajeCounts = {};
-    for (var pasaje in _pasajesSeleccionados) {
+    for (var pasaje in paymentState?.selectedPasajes ?? []) {
       pasajeCounts[pasaje.nombre] = (pasajeCounts[pasaje.nombre] ?? 0) + 1;
     }
 
     List<Widget> itemsWidget = pasajeCounts.entries.map((entry) {
       String nombre = entry.key;
       int cantidad = entry.value;
-      double precioUnitario = _pasajesSeleccionados
-          .firstWhere((p) => p.nombre == nombre)
-          .precio;
+      double precioUnitario =
+          paymentState?.selectedPasajes
+              .firstWhere((p) => p.nombre == nombre)
+              .precio ??
+          0.0;
       double subtotal = cantidad * precioUnitario;
 
       return _buildSummaryItem(
@@ -522,9 +402,11 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
         '$cantidad persona${cantidad > 1 ? 's' : ''}',
         subtotal,
         () {
-          int indexToRemove = _pasajesSeleccionados.indexWhere(
-            (p) => p.nombre == nombre,
-          );
+          int indexToRemove =
+              paymentState?.selectedPasajes.indexWhere(
+                (p) => p.nombre == nombre,
+              ) ??
+              -1;
           if (indexToRemove != -1) {
             _removePasaje(indexToRemove);
           }
@@ -559,7 +441,7 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          if (_pasajesSeleccionados.isEmpty)
+          if (paymentState?.selectedPasajes.isEmpty ?? true)
             const Text(
               'Añade un tramo para comenzar...',
               textAlign: TextAlign.center,
