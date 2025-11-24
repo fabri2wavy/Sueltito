@@ -2,32 +2,38 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
-import 'package:sueltito/core/config/app_theme.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // 1. Riverpod
 import 'package:go_router/go_router.dart';
+import 'package:sueltito/core/config/app_theme.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
 
-class NfcScanPage extends StatefulWidget {
+// 2. Tus imports de Clean Architecture
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sueltito/features/history/domain/entities/movement.dart';
+import 'package:sueltito/features/history/presentation/providers/history_provider.dart';
+
+// 3. Cambiamos a ConsumerStatefulWidget
+class NfcScanPage extends ConsumerStatefulWidget {
   const NfcScanPage({super.key});
 
   @override
-  State<NfcScanPage> createState() => _NfcScanPageState();
+  ConsumerState<NfcScanPage> createState() => _NfcScanPageState();
 }
 
-class _NfcScanPageState extends State<NfcScanPage>
+class _NfcScanPageState extends ConsumerState<NfcScanPage>
     with SingleTickerProviderStateMixin {
   
-  // (Ya no necesitamos la variable estática _hasAutoScanned porque SIEMPRE escanea)
-
   bool scanning = false;
   bool success = false;
   bool hasError = false; 
-  String message = "Buscando punto de pago..."; // Mensaje por defecto
+  String message = "Buscando punto de pago..."; 
 
   late AnimationController _controller;
   late Animation<double> _pulseAnimation;
 
-  List<Map<String, dynamic>> _ultimasTransacciones = [];
+  // 4. Usamos la entidad real 'Movement' en lugar de Map
+  List<Movement> _ultimasTransacciones = [];
+  bool _isLoadingHistory = true;
 
   @override
   void initState() {
@@ -42,34 +48,41 @@ class _NfcScanPageState extends State<NfcScanPage>
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
 
-    _cargarHistorial();
-
-    // --- CAMBIO 1: SIEMPRE INICIAMOS EL ESCANEO ---
-    // No importa si es la 1ra o la 10ma vez, arrancamos el radar.
-    Future.delayed(const Duration(milliseconds: 300), _startScan);
-    // ----------------------------------------------
-  }
-
-  Future<void> _cargarHistorial() async {
-    final prefs = await SharedPreferences.getInstance();
-    final List<String> historialJson = prefs.getStringList('historial') ?? [];
-    
-    final List<Map<String, dynamic>> transacciones = historialJson.map((itemString) {
-      try {
-        return json.decode(itemString) as Map<String, dynamic>;
-      } catch (e) {
-        return <String, dynamic>{};
-      }
-    }).where((map) => map.isNotEmpty).toList();
-
-    transacciones.sort((a, b) {
-      return (b['timestamp'] ?? '').compareTo(a['timestamp'] ?? '');
+    // 5. Cargamos el historial REAL al iniciar (usando callback para asegurar contexto)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cargarHistorialReal();
     });
 
-    if (mounted) {
-      setState(() {
-        _ultimasTransacciones = transacciones.take(3).toList();
-      });
+    // Iniciamos escaneo siempre
+    Future.delayed(const Duration(milliseconds: 300), _startScan);
+  }
+
+  // 6. Método para traer datos de la API
+  Future<void> _cargarHistorialReal() async {
+    try {
+      final user = ref.read(authProvider).value?.usuario;
+      if (user == null) return;
+
+      // Llamamos al UseCase que ya configuramos
+      final getHistoryUseCase = ref.read(getPassengerHistoryUseCaseProvider);
+      
+      // Petición a la API
+      final historial = await getHistoryUseCase.call(user.id);
+
+      if (mounted) {
+        setState(() {
+          // Tomamos las 3 últimas
+          _ultimasTransacciones = historial.take(3).toList();
+          _isLoadingHistory = false;
+        });
+      }
+    } catch (e) {
+      print("Error cargando historial en NFC Page: $e");
+      if (mounted) {
+        setState(() {
+          _isLoadingHistory = false;
+        });
+      }
     }
   }
 
@@ -100,8 +113,7 @@ class _NfcScanPageState extends State<NfcScanPage>
       }
 
       List<dynamic> records = await FlutterNfcKit.readNDEFRecords(cached: false);
-      print('[NFC] Records: $records');
-
+      
       if (records.isEmpty) {
         print('[NFC] Etiqueta vacía');
         throw Exception("Etiqueta vacía");
@@ -119,16 +131,15 @@ class _NfcScanPageState extends State<NfcScanPage>
       print('[NFC] Payload: $content');
 
       final data = json.decode(content);
-      print('[NFC] Data decodificada: $data');
-
+      
       final String? tipoTransporte = data['servicio']?['tipo_transporte'];
-      print('[NFC] Tipo transporte: $tipoTransporte');
-
+      
       String? rutaDestino;
       switch (tipoTransporte) {
         case '01': rutaDestino = AppPaths.minibusPayment; break;
         case '02': rutaDestino = AppPaths.trufisPayment; break;
         case '03': rutaDestino = AppPaths.taxiPayment; break;
+        case '04': rutaDestino = AppPaths.trufisPayment; break; 
         default:
           print('[NFC] Transporte desconocido');
           throw Exception("Transporte desconocido");
@@ -146,7 +157,8 @@ class _NfcScanPageState extends State<NfcScanPage>
 
       if (!mounted) return;
 
-      GoRouter.of(context).push(rutaDestino, extra: data);
+      // Navegamos y esperamos a que vuelva para recargar historial
+      await GoRouter.of(context).push(rutaDestino, extra: data);
 
       if (mounted) {
         setState(() {
@@ -154,11 +166,14 @@ class _NfcScanPageState extends State<NfcScanPage>
           success = false;
         });
         print('[NFC] Reiniciando escaneo tras navegación');
+        
+        // Al volver, recargamos el historial para ver el nuevo pago (si hubo)
+        _cargarHistorialReal();
         _startScan();
       }
-    } catch (e, st) {
+    } catch (e) {
       print('[NFC][ERROR] $e');
-      print('[NFC][STACK] $st');
+      
       String errorMessage;
       if (e is PlatformException && e.code == '408') {
         errorMessage = "Tiempo agotado. ¿Reintentar?";
@@ -226,7 +241,7 @@ class _NfcScanPageState extends State<NfcScanPage>
                   ),
                   child: const Icon(Icons.cancel_rounded, size: 100, color: Colors.red),
                 )
-              : ScaleTransition( // ESTADO ESCANEANDO (Siempre activo)
+              : ScaleTransition( 
                   key: const ValueKey('pulse'),
                   scale: _pulseAnimation,
                   child: Container(
@@ -315,12 +330,9 @@ class _NfcScanPageState extends State<NfcScanPage>
                     
                     const SizedBox(height: 34),
 
-                    // --- CAMBIO 3: EL BOTÓN SÓLO APARECE SI NO ESTÁ ESCANEANDO ---
-                    // Como ahora siempre escanea, esto significa que el botón 
-                    // SOLO aparece si hubo un ERROR (hasError = true).
                     if (!scanning)
                       ElevatedButton(
-                        onPressed: _startScan, // Al presionar, reinicia el bucle
+                        onPressed: _startScan, 
                         style: ElevatedButton.styleFrom(
                           backgroundColor: hasError ? Colors.red : AppColors.primaryGreen,
                           foregroundColor: Colors.white,
@@ -337,14 +349,13 @@ class _NfcScanPageState extends State<NfcScanPage>
                         ),
                       )
                     else
-                      // Espacio vacío para mantener la altura cuando no hay botón
                       const SizedBox(height: 52), 
-                    // -------------------------------------------------------------
                   ],
                 ),
               ),
             ),
 
+            // 7. SECCIÓN DE HISTORIAL REAL
             Container(
               width: width * 0.88,
               margin: const EdgeInsets.only(bottom: 18),
@@ -370,7 +381,13 @@ class _NfcScanPageState extends State<NfcScanPage>
                     ),
                   ),
                   const SizedBox(height: 12),
-                  if (_ultimasTransacciones.isEmpty)
+                  
+                  if (_isLoadingHistory)
+                     const Center(child: Padding(
+                       padding: EdgeInsets.all(8.0),
+                       child: CircularProgressIndicator(),
+                     ))
+                  else if (_ultimasTransacciones.isEmpty)
                     const Center(
                       child: Padding(
                         padding: EdgeInsets.symmetric(vertical: 16.0),
@@ -381,24 +398,32 @@ class _NfcScanPageState extends State<NfcScanPage>
                       ),
                     )
                   else
-                    ..._ultimasTransacciones.map((transaccion) {
-                      final String tipo = (transaccion['type'] ?? '...').toString().toUpperCase();
-                      final String nombre = transaccion['nombre'] ?? 'Error';
-                      final double precio = (transaccion['precio'] is num) 
-                          ? (transaccion['precio'] as num).toDouble() 
-                          : 0.0;
-
+                    // Renderizamos los objetos 'Movement' reales
+                    ..._ultimasTransacciones.map((mov) {
+                      // Formateo simple de fecha (ej: 15/11)
+                      final dateStr = "${mov.fecha.day}/${mov.fecha.month}";
+                      
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10.0),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              "$tipo:\n$nombre",
-                              style: const TextStyle(fontSize: 14),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  mov.transporte, // 'MINIBUS', etc.
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  "${mov.tramo} • $dateStr", 
+                                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                ),
+                              ],
                             ),
                             Text(
-                              "Bs ${precio.toStringAsFixed(2)}",
+                              "Bs ${mov.monto.toStringAsFixed(2)}",
                               style: const TextStyle(
                                   fontSize: 14, fontWeight: FontWeight.bold),
                             ),

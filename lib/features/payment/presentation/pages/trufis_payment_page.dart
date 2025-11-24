@@ -393,7 +393,7 @@ class _TrufiPaymentPageState extends State<TrufiPaymentPage> {
                               final List<String> nuevosItemsJson = _pasajesSeleccionados.map((pasaje) {
                                 final Map<String, dynamic> transaccion = {
                                   // ¡¡LA CLAVE ESTÁ AQUÍ!!
-                                  'type': 'trufi', // ¡TIPO ESPECÍFICO DE TRUFI!
+                                  'type': 'trufi', //
                                   'timestamp': timestamp,
                                   'nombre': pasaje.nombre,
                                   'precio': pasaje.precio,
