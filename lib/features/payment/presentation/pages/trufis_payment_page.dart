@@ -44,7 +44,6 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
   }
 
   void _addPasaje(String nombre, double precio, String codigo) {
@@ -387,6 +386,7 @@ class _TrufiPaymentPageState extends ConsumerState<TrufiPaymentPage> {
     );
   }
 
+  // --- MÉTODO ARREGLADO (Conflicto resuelto) ---
   Widget _buildPayButton(BuildContext context) {
     final state = GoRouterState.of(context);
     final extra = state.extra as Map<String, dynamic>?;
