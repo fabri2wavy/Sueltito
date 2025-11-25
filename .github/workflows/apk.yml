@@ -34,8 +34,8 @@ jobs:
 
       - name: Upload to OneDrive
         run: |
-          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
-          DEST_PATH="sueltito/app-debug.apk"
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+          DEST_PATH="sueltito/app-release.apk"
 
           rclone copy "$APK_PATH" "onedrive:${DEST_PATH}" --progress
 
