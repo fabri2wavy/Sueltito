@@ -1,0 +1,113 @@
+name: Build Flutter APK and upload to OneDrive
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Crear archivo .env
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > .env
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Cache Flutter Pub packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-pub-
+
+      - name: Cache Dart tool
+        uses: actions/cache@v4
+        with:
+          path: |
+            .dart_tool
+          key: ${{ runner.os }}-dart-tool-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-dart-tool-
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}-${{ hashFiles('android/**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Generate app icons (if custom icon exists)
+        run: |
+          if [ -f assets/images/logo_with_text.png ]; then
+            echo "Generating app icons from assets/images/logo_with_text.png"
+            flutter pub run flutter_launcher_icons:main
+          else
+            echo "No custom app icon found at assets/images/logo_with_text.png, skipping"
+          fi
+
+      - name: Buildear apk
+        run: flutter build apk --release
+
+      - name: Create timestamped APK name
+        run: |
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+          if [ ! -f "$APK_PATH" ]; then
+            echo "APK not found at $APK_PATH" >&2
+            exit 1
+          fi
+          TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          APK_NAME="app-release-${TIMESTAMP}.apk"
+          cp "$APK_PATH" "build/app/outputs/flutter-apk/${APK_NAME}"
+          echo "APK_NAME=${APK_NAME}" >> $GITHUB_ENV
+
+      - name: Show generated APK name
+        run: |
+          echo "Generated APK: build/app/outputs/flutter-apk/${APK_NAME}"
+
+      - name: Install rclone
+        run: sudo apt-get install -y rclone
+
+      - name: Crear config rclone
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf << 'EOF'
+          ${{ secrets.RCLONE_CONFIG_ONEDRIVE }}
+          EOF
+
+      - name: Validate rclone config and upload to OneDrive
+        run: |
+          APK_NAME=${APK_NAME:-app-release.apk}
+          APK_PATH="build/app/outputs/flutter-apk/${APK_NAME}"
+          DEST_PATH="sueltito/${APK_NAME}"
+          # Check that the config file was created and is not empty
+          if [ ! -s ~/.config/rclone/rclone.conf ]; then
+            echo "rclone config file is missing or empty" >&2
+            exit 1
+          fi
+
+          # Show rclone version and configured remotes
+          rclone --version
+          rclone listremotes
+
+          # Quick check that the onedrive remote is available; fail early if misconfigured
+          rclone lsd onedrive:
+
+          # Copy the APK; add --progress and --verbose for easier debugging
+          rclone copy "$APK_PATH" "onedrive:${DEST_PATH}" --progress --verbose
+

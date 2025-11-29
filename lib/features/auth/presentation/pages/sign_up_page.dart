@@ -8,6 +8,7 @@ import 'package:sueltito/core/widgets/sueltito_text_field.dart';
 import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
 import '../providers/auth_provider.dart';
 import 'package:sueltito/core/services/notification_service.dart';
+import 'package:sueltito/core/network/api_client.dart';
 import '../providers/register_provider.dart';
 
 class SignUpPage extends ConsumerStatefulWidget {
@@ -60,9 +61,8 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
       await ref.read(registerFormProvider.notifier).submitRegister(context);
     } catch (e) {
       if (mounted) {
-        ref.read(notificationServiceProvider).showWarning(
-          e.toString().replaceAll('Exception: ', ''),
-        );
+        final err = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
+        ref.read(notificationServiceProvider).showWarning(err);
       }
     }
   }
@@ -83,7 +83,8 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
           }
         },
         error: (error, stack) {
-          notificationService.showError(error.toString().replaceAll('Exception: ', ''));
+          final err = error is ApiException ? error.message : error.toString().replaceAll('Exception: ', '');
+          notificationService.showError(err);
         },
         loading: () {},
       );

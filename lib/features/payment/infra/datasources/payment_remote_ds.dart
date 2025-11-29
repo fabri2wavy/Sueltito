@@ -16,6 +16,8 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
     try {
       final response = await apiClient.post('/pasaje/prepare', data: request.toJson());
       return PasajePrepareResponseModel.fromJson(response);
+    } on ApiException catch (_) {
+      rethrow; // Let ApiException bubble up so UI can display server message
     } catch (e) {
       throw Exception('Error al preparar pasaje: $e');
     }
@@ -25,6 +27,8 @@ class PaymentRemoteDataSourceImpl implements PaymentRemoteDataSource {
     try {
       final response = await apiClient.post('/pasaje/register', data: request.toJson());
       return PasajePrepareResponseModel.fromJson(response);
+    } on ApiException catch (_) {
+      rethrow; // Give ApiException message to higher layers
     } catch (e) {
       throw Exception('Error al registrar pasaje: $e');
     }

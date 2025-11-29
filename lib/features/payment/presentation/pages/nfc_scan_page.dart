@@ -5,6 +5,8 @@ import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // 1. Riverpod
 import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/network/api_client.dart';
+import 'package:sueltito/core/services/notification_service.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
 
 // 2. Tus imports de Clean Architecture
@@ -63,11 +65,11 @@ class _NfcScanPageState extends ConsumerState<NfcScanPage>
       final user = ref.read(authProvider).value?.usuario;
       if (user == null) return;
 
-      // Llamamos al UseCase
-      final getHistoryUseCase = ref.read(getPassengerHistoryUseCaseProvider);
+  // Llamamos al UseCase genérico y pasamos el perfil actual del usuario
+  final getHistoryUseCase = ref.read(getHistoryUseCaseProvider);
       
-      // Petición a la API
-      final historial = await getHistoryUseCase.call(user.id);
+  // Petición a la API
+  final historial = await getHistoryUseCase.call(user.id, profile: user.perfilActual);
 
       if (mounted) {
         setState(() {
@@ -78,11 +80,20 @@ class _NfcScanPageState extends ConsumerState<NfcScanPage>
       }
     } catch (e) {
       print("Error cargando historial en NFC Page: $e");
+      // final notific = ref.read(notificationServiceProvider);
+      // String errorMessage;
+      // if (e is ApiException) {
+      //   errorMessage = e.message;
+      // } else {
+      //   errorMessage = e.toString().replaceAll('Exception: ', '');
+      // }
+
       if (mounted) {
         setState(() {
           _isLoadingHistory = false;
         });
       }
+      // notific.showError(errorMessage);
     }
   }
 
@@ -288,13 +299,17 @@ class _NfcScanPageState extends ConsumerState<NfcScanPage>
               alignment: Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Text(
-                  "Bienvenido!",
-                  style: textTheme.headlineSmall?.copyWith(
-                    color: AppColors.primaryGreen,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                child: Builder(builder: (context) {
+                  final user = ref.watch(authProvider).value?.usuario;
+                  final title = user != null ? 'Bienvenido ${user.nombre}' : 'Bienvenido!';
+                  return Text(
+                    title,
+                    style: textTheme.headlineSmall?.copyWith(
+                      color: AppColors.primaryGreen,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  );
+                }),
               ),
             ),
 

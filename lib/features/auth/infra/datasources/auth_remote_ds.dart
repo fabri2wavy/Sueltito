@@ -25,8 +25,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
 
       return AuthResponseModel.fromJson(response);
-    } on ApiException catch (e) {
-      throw Exception('Error en login: ${e.message}');
+    } on ApiException {
+      rethrow; // Preserve ApiException so UI can show exact server message
     } catch (e) {
       throw Exception('Error de conexión: $e');
     }
@@ -41,8 +41,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
 
       return AuthResponseModel.fromJson(response);
-    } on ApiException catch (e) {
-      throw Exception('Error en registro: ${e.message}');
+    } on ApiException {
+      rethrow;
     } catch (e) {
       throw Exception('Error de conexión: $e');
     }
@@ -57,8 +57,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
 
       return ProfileChangeResponseModel.fromJson(response);
-    } on ApiException catch (e) {
-      throw Exception('Error al cambiar perfil: ${e.message}');
+    } on ApiException {
+      rethrow;
     } catch (e) {
       throw Exception('Error de conexión: $e');
     }
@@ -73,8 +73,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       });
 
       return AddProfileResponseModel.fromJson(response);
-    } on ApiException catch (e) {
-      throw Exception('Error al agregar perfil: ${e.message}');
+    } on ApiException {
+      rethrow;
     } catch (e) {
       throw Exception('Error de conexión: $e');
     }

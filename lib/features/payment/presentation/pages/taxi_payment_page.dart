@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:flutter/material.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/network/api_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sueltito/features/payment/presentation/providers/payment_provider.dart';
 import 'package:sueltito/features/payment/presentation/widgets/payment_confirmation_dialog.dart';
@@ -287,7 +288,12 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
                       }
                     }
                   } catch (e) {
-                    notifSvc.showError(e.toString());
+                    final err = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
+                    if (err.contains('http') && (err.endsWith('.png') || err.endsWith('.jpg') || err.endsWith('.jpeg'))) {
+                      showDialog(context: context, builder: (_) => Dialog(child: Image.network(err)));
+                    } else {
+                      notifSvc.showError(err);
+                    }
                   }
                 },
               );
@@ -295,7 +301,8 @@ class _TaxiPaymentPageState extends ConsumerState<TaxiPaymentPage> {
           );
         } catch (e) {
           final notifSvc = ref.read(notificationServiceProvider);
-          notifSvc.showError(e.toString());
+          final err = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
+          notifSvc.showError(err);
         }
       },
       tooltip: hasItems ? null : (_montoError ?? 'Ingrese un monto válido'),

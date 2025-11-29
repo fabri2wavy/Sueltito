@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sueltito/core/config/app_theme.dart';
-import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
+// import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 import 'package:sueltito/features/history/domain/entities/movement.dart';
+import 'package:sueltito/core/network/api_client.dart';
+import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
+import 'package:sueltito/core/constants/roles.dart';
 
 // Importamos tus providers nuevos
 import '../providers/history_provider.dart';
@@ -15,64 +18,16 @@ class HistoryPage extends ConsumerStatefulWidget {
 }
 
 class _HistoryPageState extends ConsumerState<HistoryPage> {
-  List<Movement> _movimientos = [];
-  bool _isLoading = true;
-  String? _errorMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    // Usamos el callback para asegurar que el contexto esté listo antes de llamar a Riverpod
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _cargarHistorial();
-    });
-  }
-
-  Future<void> _cargarHistorial() async {
-    try {
-      // 1. Obtener ID del usuario (de tu AuthProvider existente)
-      final user = ref.read(authProvider).value?.usuario;
-      
-      if (user == null) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _errorMessage = "No se encontró usuario activo";
-          });
-        }
-        return;
-      }
-
-      // 2. LIMPIEZA: Aquí pedimos el UseCase listo a Riverpod (Ya no hacemos 'new ApiClient')
-      final getHistoryUseCase = ref.read(getPassengerHistoryUseCaseProvider);
-
-      // 3. Ejecutamos el caso de uso
-      final lista = await getHistoryUseCase.call(user.id);
-
-      // 4. Actualizar UI
-      if (mounted) {
-        setState(() {
-          _movimientos = lista;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          // _errorMessage = e.toString(); // Descomentar para debug
-          _errorMessage = "No se pudo cargar el historial.";
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final user = ref.watch(authProvider).value?.usuario;
+    final title = (user?.perfilActual == Roles.chofer || user?.perfilActual == 'BANCO') ? 'Historial de Cobros' : 'Historial de Pagos';
+    print("[HistoryPage] Building History Page for role: ${user?.perfilActual}");
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Historial de Pagos',
+        title: Text(
+          title,
           style: TextStyle(
             color: AppColors.primaryGreen,
             fontWeight: FontWeight.bold,
@@ -88,53 +43,50 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
   }
 
   Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    final historyAsync = ref.watch(historyFutureProvider);
 
-    if (_errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.history_toggle_off, size: 60, color: Colors.grey),
-            const SizedBox(height: 16),
-            Text(_errorMessage!, style: const TextStyle(color: Colors.grey, fontSize: 16)),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _isLoading = true;
-                  _errorMessage = null;
-                });
-                _cargarHistorial();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryGreen,
-                foregroundColor: Colors.white,
+
+    return historyAsync.when(
+      data: (movimientos) {
+        if (movimientos.isEmpty) {
+          return const Center(child: Text("No tienes movimientos registrados."));
+        }
+        return RefreshIndicator(
+          onRefresh: () async { ref.invalidate(historyFutureProvider); },
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: movimientos.length,
+            separatorBuilder: (_, __) => const Divider(),
+            itemBuilder: (context, index) {
+              final mov = movimientos[index];
+              return _buildHistoryItem(mov);
+            },
+          ),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) {
+        final msg = e is ApiException ? e.message : e.toString();
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.history_toggle_off, size: 60, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(msg, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () async { ref.invalidate(historyFutureProvider); },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryGreen,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text("Recargar"),
               ),
-              child: const Text("Recargar"),
-            )
-          ],
-        ),
-      );
-    }
-
-    if (_movimientos.isEmpty) {
-      return const Center(child: Text("No tienes movimientos registrados."));
-    }
-
-    return RefreshIndicator(
-      onRefresh: _cargarHistorial,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _movimientos.length,
-        separatorBuilder: (_, __) => const Divider(),
-        itemBuilder: (context, index) {
-          final mov = _movimientos[index];
-          return _buildHistoryItem(mov);
-        },
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
