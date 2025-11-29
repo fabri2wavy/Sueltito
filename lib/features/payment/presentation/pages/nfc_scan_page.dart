@@ -5,6 +5,8 @@ import 'package:flutter_nfc_kit/flutter_nfc_kit.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // 1. Riverpod
 import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/network/api_client.dart';
+import 'package:sueltito/core/services/notification_service.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
 
 // 2. Tus imports de Clean Architecture
@@ -78,11 +80,20 @@ class _NfcScanPageState extends ConsumerState<NfcScanPage>
       }
     } catch (e) {
       print("Error cargando historial en NFC Page: $e");
+      // final notific = ref.read(notificationServiceProvider);
+      // String errorMessage;
+      // if (e is ApiException) {
+      //   errorMessage = e.message;
+      // } else {
+      //   errorMessage = e.toString().replaceAll('Exception: ', '');
+      // }
+
       if (mounted) {
         setState(() {
           _isLoadingHistory = false;
         });
       }
+      // notific.showError(errorMessage);
     }
   }
 

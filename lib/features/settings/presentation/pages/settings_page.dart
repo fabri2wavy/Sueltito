@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/network/api_client.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
@@ -277,9 +278,8 @@ class SettingsPage extends ConsumerWidget {
                               }
                             }
                           } catch (e) {
-                            notificationService.showError(
-                              'Error al cambiar perfil: ${e.toString()}',
-                            );
+                            final err = e is ApiException ? e.message : e.toString();
+                            notificationService.showError('Error al cambiar perfil: $err');
                             dialogContext.pop();
                           }
                         },

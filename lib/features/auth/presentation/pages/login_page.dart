@@ -5,6 +5,7 @@ import 'package:sueltito/core/config/app_theme.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/core/widgets/sueltito_text_field.dart';
 import 'package:sueltito/core/services/notification_service.dart';
+import 'package:sueltito/core/network/api_client.dart';
 import 'package:sueltito/features/auth/domain/entities/auth_response.dart';
 import '../providers/auth_provider.dart';
 
@@ -39,9 +40,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           }
         },
         error: (error, stack) {
-          notificationService.showError(
-            error.toString().replaceAll('Exception: ', ''),
-          );
+          final err = error is ApiException ? error.message : error.toString().replaceAll('Exception: ', '');
+          notificationService.showError(err);
         },
         loading: () {},
       );

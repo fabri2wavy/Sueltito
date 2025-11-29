@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/network/api_client.dart';
 import 'package:sueltito/core/constants/app_paths.dart';
 import 'package:sueltito/features/payment/domain/entities/pasaje.dart';
 import 'package:sueltito/core/constants/pasaje_constants.dart';
@@ -365,14 +366,20 @@ class _MinibusPaymentPageState extends ConsumerState<MinibusPaymentPage> {
                   }
                 }
               } catch (e) {
-                notifSvc.showError(e.toString());
+                final err = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
+                if (err.contains('http') && (err.endsWith('.png') || err.endsWith('.jpg') || err.endsWith('.jpeg'))) {
+                  showDialog(context: context, builder: (_) => Dialog(child: Image.network(err)));
+                } else {
+                  notifSvc.showError(err);
+                }
               }
             },
           );
         },
       );
     } catch (e) {
-      notifSvc.showError(e.toString());
+      final err = e is ApiException ? e.message : e.toString().replaceAll('Exception: ', '');
+      notifSvc.showError(err);
     }
   }
 

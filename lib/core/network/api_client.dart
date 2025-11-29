@@ -123,9 +123,17 @@ class ApiClient {
   }
 
   T _handleResponse<T>(Response response, T Function(dynamic)? parser) {
+    // Check HTTP status
     if (response.statusCode != null &&
         response.statusCode! >= 200 &&
         response.statusCode! < 300) {
+      // If the API uses a 'continuar_flujo' boolean to denote business errors,
+      // we must detect it even when HTTP status is 200 and raise an exception
+      if (response.data is Map && response.data['continuar_flujo'] == false) {
+        final message = _extractServerErrorMessage(response.data);
+        throw ApiException(statusCode: response.statusCode ?? 0, message: message);
+      }
+
       if (parser != null && response.data != null) {
         return parser(response.data);
       }
@@ -154,12 +162,11 @@ class ApiClient {
           message: 'Tiempo de respuesta agotado',
         );
       case DioExceptionType.badResponse:
+        final data = error.response?.data;
+        final serverMessage = _extractServerErrorMessage(data);
         return ApiException(
           statusCode: error.response?.statusCode ?? 0,
-          message:
-              error.response?.data?['message'] ??
-              error.response?.statusMessage ??
-              'Error en la respuesta del servidor',
+          message: serverMessage,
         );
       case DioExceptionType.cancel:
         return ApiException(statusCode: 0, message: 'Petición cancelada');
@@ -170,6 +177,46 @@ class ApiClient {
         );
       default:
         return ApiException(statusCode: 0, message: 'Error desconocido');
+    }
+  }
+
+  // Try to extract a meaningful message from server responses that follow
+  // the structure provided in the issue (mensaje + detalle_error).
+  String _extractServerErrorMessage(dynamic data) {
+    try {
+      if (data == null) return 'Error en la respuesta del servidor';
+      if (data is Map) {
+        // Top-level 'mensaje'
+        if (data['mensaje'] != null && (data['mensaje'] is String)) {
+          return data['mensaje'] as String;
+        }
+
+        // Generic 'message' fallback
+        if (data['message'] != null && (data['message'] is String)) {
+          return data['message'] as String;
+        }
+
+        // detalle_error -> list -> each has 'error' -> { error: '...' }
+        if (data['detalle_error'] != null && data['detalle_error'] is List) {
+          final List list = data['detalle_error'] as List;
+          final messages = <String>[];
+          for (final item in list) {
+            if (item is Map) {
+              final err = item['error'];
+              if (err is Map && err['error'] != null && err['error'] is String) {
+                messages.add(err['error'] as String);
+              } else if (err is String) {
+                messages.add(err);
+              }
+            }
+          }
+          if (messages.isNotEmpty) return messages.join('\n');
+        }
+      }
+      // Fallback to some string representation
+      return data.toString();
+    } catch (_) {
+      return 'Error en la respuesta del servidor';
     }
   }
 }

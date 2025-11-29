@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sueltito/core/config/app_theme.dart';
 // import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 import 'package:sueltito/features/history/domain/entities/movement.dart';
+import 'package:sueltito/core/network/api_client.dart';
 import 'package:sueltito/features/auth/presentation/providers/auth_provider.dart';
 import 'package:sueltito/core/constants/roles.dart';
 
@@ -64,25 +65,28 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.history_toggle_off, size: 60, color: Colors.grey),
-            const SizedBox(height: 16),
-            Text(e.toString(), style: const TextStyle(color: Colors.grey, fontSize: 16)),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () async { ref.invalidate(historyFutureProvider); },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryGreen,
-                foregroundColor: Colors.white,
+      error: (e, _) {
+        final msg = e is ApiException ? e.message : e.toString();
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.history_toggle_off, size: 60, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(msg, style: const TextStyle(color: Colors.grey, fontSize: 16)),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () async { ref.invalidate(historyFutureProvider); },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryGreen,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text("Recargar"),
               ),
-              child: const Text("Recargar"),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 

@@ -16,20 +16,14 @@ class HistoryRemoteDataSource {
 
   /// Obtiene el historial de cobros realizados (Perfil CONDUCTOR)
   Future<List<MovementModel>> getDriverHistory(String userId) async {
-    try {
-      // Delegamos a la versión genérica
-      return await getHistory(userId, profile: Roles.chofer);
-    } catch (e) {
-      print('Error en History DS (Conductor wrapper): $e');
-      return [];
-    }
+    // Delegamos a la versión genérica. Permitimos que ApiException se propague.
+    return await getHistory(userId, profile: Roles.chofer);
   }
 
   /// Versión genérica: decide el endpoint según el perfil proporcionado.
   /// Si `profile` es null, por compatibilidad puedes usar `getHistoryForUser`.
   Future<List<MovementModel>> getHistory(String userId, {String? profile, int limite = 10}) async {
-    try {
-      final usedProfile = (profile ?? Roles.pasajero).toUpperCase();
+    final usedProfile = (profile ?? Roles.pasajero).toUpperCase();
       final endpoint = '/user/$userId/move?profile=$usedProfile&limite=$limite';
       print("Llamando a API History: $endpoint");
 
@@ -41,10 +35,8 @@ class HistoryRemoteDataSource {
       }
 
       return [];
-    } catch (e) {
-      print('Error en History DS (getHistory): $e');
-      return [];
-    }
+    // Any ApiException or other exceptions will be thrown up the stack and should be
+    // handled by the callers (usecases / UI) to display the proper message.
   }
 
   /// Versión que recibe el `User` completo y usa `perfilActual`/`Roles` para decidir.

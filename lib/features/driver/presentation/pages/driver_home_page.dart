@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sueltito/core/config/app_theme.dart';
+import 'package:sueltito/core/network/api_client.dart';
 import 'package:sueltito/core/widgets/app_bottom_navigation.dart';
 import 'package:sueltito/core/navigation/constants/navigation_config.dart';
 import 'package:sueltito/core/navigation/presentation/providers/navigation_provider.dart';
@@ -180,7 +181,10 @@ class DriverHomeContent extends ConsumerWidget {
                               );
                             },
                             loading: () => const Center(child: CircularProgressIndicator()),
-                            error: (e, _) => const Center(child: Text("Error de conexión", style: TextStyle(color: Colors.red))),
+                            error: (e, _) {
+                              final msg = e is ApiException ? e.message : 'Error de conexión';
+                              return Center(child: Text(msg, style: const TextStyle(color: Colors.red)));
+                            },
                           ),
                         ),
                       ),
